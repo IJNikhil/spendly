@@ -3,6 +3,7 @@ const APP_VERSION = 'v2.6-ca';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
+  apiSecret: localStorage.getItem('sp_api_secret') || '',
   type: 'expense',
   chart: null,
   budgets: JSON.parse(localStorage.getItem('sp_budgets') || '{}'),
@@ -20,15 +21,57 @@ const S = {
 };
 
 const fetchWithTimeout = (url, options = {}, timeout = 15000) => {
+  let finalUrl = url;
+  if (S.apiSecret) {
+    if (options.method === 'POST') {
+      if (options.body) {
+        try {
+          let b = JSON.parse(options.body);
+          b.secret = S.apiSecret;
+          options.body = JSON.stringify(b);
+        } catch(e){}
+      }
+    } else {
+      finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'secret=' + encodeURIComponent(S.apiSecret);
+    }
+  }
+
+  // Offline Pending Queue for POSTs
+  if (options.method === 'POST' && !navigator.onLine) {
+    let q = JSON.parse(localStorage.getItem('sp_offline_queue') || '[]');
+    q.push({url: finalUrl, options, time: Date.now()});
+    localStorage.setItem('sp_offline_queue', JSON.stringify(q));
+    toast('Offline: Saved to pending queue', 'ok');
+    return Promise.resolve({ json: () => Promise.resolve({success: true, offline: true}) });
+  }
+
   const opts = { redirect: 'follow', ...options, headers: { 'Content-Type': 'text/plain;charset=utf-8', ...(options.headers || {}) } };
   return Promise.race([
-    fetch(url, opts),
+    fetch(finalUrl, opts),
     new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
   ]);
 };
 
+window.addEventListener('online', flushOfflineQueue);
+function flushOfflineQueue() {
+  let q = JSON.parse(localStorage.getItem('sp_offline_queue') || '[]');
+  if (!q.length) return;
+  toast('Syncing offline transactions...', 'ok');
+  let promises = q.map(req => {
+    const opts = { redirect: 'follow', ...req.options, headers: { 'Content-Type': 'text/plain;charset=utf-8', ...(req.options.headers || {}) } };
+    return fetch(req.url, opts).catch(e=>null);
+  });
+  Promise.all(promises).then(() => {
+    localStorage.removeItem('sp_offline_queue');
+    toast('Offline queue synced', 'ok');
+    invalidateCaches();
+    if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboard();
+  });
+}
+
 function init() {
   document.getElementById('inp-url').value = S.url;
+  document.getElementById('inp-secret').value = S.apiSecret;
   document.getElementById('mod-date').valueAsDate = new Date();
   
   if(localStorage.getItem('sp_theme') === 'light') {
@@ -150,9 +193,12 @@ function setTxnType(type) {
 
 function saveSettings() {
   const url = document.getElementById('inp-url').value.trim();
+  const secret = document.getElementById('inp-secret').value.trim();
   if(url && !url.startsWith('https://')) { toast('Invalid URL', 'err'); return; }
   S.url = url;
   localStorage.setItem('sp_pro_url', url);
+  S.apiSecret = secret;
+  localStorage.setItem('sp_api_secret', secret);
   toast('Connection Saved', 'ok');
   nav('dashboard', document.querySelectorAll('.nav-item')[0]);
 }
@@ -287,12 +333,13 @@ function calculateTax(income, regime) {
     if (rem > 600000)  { tax += (rem - 600000) * 0.10; rem = 600000; }
     if (rem > 300000)  { tax += (rem - 300000) * 0.05; }
   } else {
-    if (income <= 250000) return 0;
-    if (income <= 500000) return 0;
+    if (income <= 700000) return 0; // 87A Rebate handles up to 7L in new regime
     let rem = income;
-    if (rem > 1000000) { tax += (rem - 1000000) * 0.30; rem = 1000000; }
-    if (rem > 500000)  { tax += (rem - 500000) * 0.20; rem = 500000; }
-    if (rem > 250000)  { tax += (rem - 250000) * 0.05; }
+    if (rem > 1500000) { tax += (rem - 1500000) * 0.30; rem = 1500000; }
+    if (rem > 1200000) { tax += (rem - 1200000) * 0.20; rem = 1200000; }
+    if (rem > 900000)  { tax += (rem - 900000) * 0.15; rem = 900000; }
+    if (rem > 600000)  { tax += (rem - 600000) * 0.10; rem = 600000; }
+    if (rem > 300000)  { tax += (rem - 300000) * 0.05; }
   }
   return tax + (tax * 0.04); 
 }
@@ -300,7 +347,7 @@ function calculateTax(income, regime) {
 function renderITR(d, regime) {
   const h = d.incomeByHead || {salary:0, business:0, stcg:0, ltcg:0, otherSources:0};
   const grossSalary = h.salary || 0;
-  let standardDed = (grossSalary > 0) ? Math.min(grossSalary, 50000) : 0;
+  let standardDed = (grossSalary > 0) ? Math.min(grossSalary, regime === 'new' ? 75000 : 50000) : 0;
   let netSalary = grossSalary - standardDed;
   
   let grossTotalIncome = netSalary + (h.business||0) + (h.stcg||0) + (h.ltcg||0) + (h.otherSources||0);
@@ -909,7 +956,7 @@ function exportITRPDF() {
   let d = S.itrData;
   let h = d.incomeByHead;
   let gSal = h.salary || 0;
-  let sDed = (gSal>0)?Math.min(gSal,50000):0;
+  let sDed = (gSal>0)?Math.min(gSal, S.currentRegime === 'new' ? 75000 : 50000):0;
   let nSal = gSal - sDed;
   let gti = nSal + (h.business||0) + (h.stcg||0) + (h.ltcg||0) + (h.otherSources||0);
   

@@ -209,14 +209,18 @@
       <header class="page-header"><h1>Settings</h1></header>
       <div class="dash-layout">
         
-        <div class="card max-w-lg" style="margin-bottom:0">
-          <h2 class="card-title">API Connection</h2>
+        <div class="card" style="margin-bottom:24px;">
+          <h2 class="card-title">Backend Connection</h2>
           <div class="input-group">
-            <label>Apps Script Web App URL</label>
-            <input type="url" id="inp-url" placeholder="https://script.google.com/...">
+            <label>Google Apps Script URL</label>
+            <input type="text" id="inp-url" placeholder="https://script.google.com/macros/s/.../exec">
           </div>
-          <button class="btn btn-primary" onclick="saveSettings()">Save &amp; Connect</button>
-          
+          <div class="input-group">
+            <label>API Secret Passcode (Optional)</label>
+            <input type="password" id="inp-secret" placeholder="Your API_SECRET property">
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()">Save Connection</button>
+        </div>  
           <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
           
           <h2 class="card-title">Database Setup (New Users)</h2>

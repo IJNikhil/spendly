@@ -9,6 +9,10 @@ function doPost(e) {
 
   try {
     var d = JSON.parse(e.postData.contents);
+
+  var expectedSecret = PropertiesService.getScriptProperties().getProperty('API_SECRET');
+  if (expectedSecret && d.secret !== expectedSecret) return error('Unauthorized');
+
     var action = d.action;
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
@@ -83,7 +87,34 @@ function doPost(e) {
       if (row > 0) {
         var paid = parseInt(ls.getRange(row, 6).getValue()) || 0;
         ls.getRange(row, 6).setValue(paid + 1);
-        return success({msg: 'Payment Recorded'});
+        
+        // Auto-generate EMI Expense Transaction
+        var dt = new Date();
+        if (d.dateOverride) dt = new Date(d.dateOverride);
+        
+        var txnRow = [
+          'tx_emi_' + Date.now().toString(36), // ID
+          dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}), // DateStr
+          dt.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'}), // TimeStr
+          'expense', // Type
+          parseFloat(d.emi), // Amount
+          'EMI / Loan Payment', // Category
+          'EMI: ' + String(d.name), // Title
+          'Bank', // Entity
+          'FALSE', // TaxDeductible
+          '', // Status
+          dt.getMonth() + 1, // Month
+          dt.getFullYear(), // Year
+          weekNum(dt), // Week
+          'TRUE', // Recurring
+          'None', // TaxSection
+          'Auto Debit', // PaymentMode
+          '', // IncomeHead
+          d.bankAccount || 'Default' // BankAccount
+        ];
+        ts.appendRow(txnRow);
+        
+        return success({msg: 'Payment Recorded & Transaction Added'});
       }
       return error('Loan not found');
     }
@@ -133,6 +164,10 @@ function findRowById(sheet, id) {
 
 function doGet(e) {
   try {
+
+  var expectedSecret = PropertiesService.getScriptProperties().getProperty('API_SECRET');
+  if (expectedSecret && e.parameter.secret !== expectedSecret) return error('Unauthorized');
+
     var action = e.parameter.action || '';
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var ts = ss.getSheetByName('Transactions');
@@ -211,7 +246,7 @@ function doGet(e) {
       for (var i = 1; i < data.length; i++) {
         var r = data[i];
         var rY = parseInt(r[11]), rM = parseInt(r[10]);
-        var inFY = (rY === fy-1 && rM >= 4) || (rY === fy && rM <= 3);
+        var inFY = (getFY(rM, rY) === fy);
         if (!inFY) continue;
 
         var rType    = String(r[3]).toLowerCase();
@@ -316,3 +351,10 @@ function rowToObj(row) {
 function success(data) { data.success = true; return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
 function error(msg) { return ContentService.createTextOutput(JSON.stringify({success:false,error:msg})).setMimeType(ContentService.MimeType.JSON); }
 function weekNum(d) { var j = new Date(d.getFullYear(),0,1); return Math.ceil((((d-j)/86400000)+j.getDay()+1)/7); }
+
+
+function getFY(month, year) {
+  // month is 1-12. If Apr-Dec (>=4), FY is year to year+1. If Jan-Mar (<=3), FY is year-1 to year.
+  // We return the end year of the FY. E.g. Mar 2026 -> 2026. May 2025 -> 2026.
+  return month >= 4 ? year + 1 : year;
+}
