@@ -141,29 +141,41 @@ function saveSettings() {
   nav('dashboard', document.querySelectorAll('.nav-item')[0]);
 }
 
-// --- DATA FETCHING ---
+// --- DATA FETCHING (Offline First Caching) ---
+function renderDashboardData(d) {
+  animateValue('val-net', d.netFlow); animateValue('val-income', d.income);
+  animateValue('val-expense', d.expense); animateValue('val-invest', d.investment);
+  renderTxnList(d.recent || [], 'recent-list', true);
+  renderChart(d.categories || {});
+  renderBudgets(d.categories || {});
+  renderSubscriptions(d.subscriptions || []);
+  renderLoans(d.loans || []);
+}
+
 function loadDashboard() {
   if(!S.url) return;
   const now = new Date();
   const m = now.getMonth() + 1;
   const y = now.getFullYear();
+  const cacheKey = `sp_cache_dash_${m}_${y}`;
   
-  document.getElementById('recent-list').innerHTML = '<div class="loading-state">Syncing data...</div>';
+  // 1. Instantly render from cache if available
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try { renderDashboardData(JSON.parse(cached)); } catch(e){}
+  } else {
+    document.getElementById('recent-list').innerHTML = '<div class="loading-state">Syncing data...</div>';
+  }
   
+  // 2. Fetch in background and update UI silently
   fetchWithTimeout(`${S.url}?action=dashboard&month=${m}&year=${y}`, {})
     .then(r => r.json())
     .then(d => {
       if(!d.success) throw new Error(d.error || 'Server error');
-      animateValue('val-net', d.netFlow); animateValue('val-income', d.income);
-      animateValue('val-expense', d.expense); animateValue('val-invest', d.investment);
-      
-      renderTxnList(d.recent || [], 'recent-list', true);
-      renderChart(d.categories || {});
-      renderBudgets(d.categories || {});
-      renderSubscriptions(d.subscriptions || []);
-      renderLoans(d.loans || []);
+      localStorage.setItem(cacheKey, JSON.stringify(d));
+      renderDashboardData(d);
     }).catch(e => {
-      document.getElementById('recent-list').innerHTML = `<div class="loading-state">Connection failed: ${e.message === 'timeout' ? 'Timeout' : 'Check URL in Settings'}.</div>`;
+      if (!cached) document.getElementById('recent-list').innerHTML = `<div class="loading-state">Connection failed: ${e.message === 'timeout' ? 'Timeout' : 'Check URL in Settings'}.</div>`;
     });
 }
 
@@ -171,40 +183,60 @@ function loadHistory() {
   if(!S.url) return;
   const m = document.getElementById('hist-month').value;
   const y = document.getElementById('hist-year').value;
+  const cacheKey = `sp_cache_hist_${m}_${y}`;
   
-  document.getElementById('hist-list').innerHTML = '<div class="loading-state">Syncing ledger...</div>';
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try { renderTxnList(JSON.parse(cached), 'hist-list'); } catch(e){}
+  } else {
+    document.getElementById('hist-list').innerHTML = '<div class="loading-state">Syncing ledger...</div>';
+  }
   
   fetchWithTimeout(`${S.url}?action=history&month=${m}&year=${y}`, {})
     .then(r => r.json())
     .then(d => {
       if(!d.success) throw new Error();
+      localStorage.setItem(cacheKey, JSON.stringify(d.transactions || []));
       renderTxnList(d.transactions || [], 'hist-list');
     }).catch(() => {
-      document.getElementById('hist-list').innerHTML = '<div class="loading-state">Failed to load ledger.</div>';
+      if (!cached) document.getElementById('hist-list').innerHTML = '<div class="loading-state">Failed to load ledger.</div>';
     });
+}
+
+function renderTaxData(d) {
+  let claims = d.claims || [];
+  renderTxnList(claims, 'claims-list');
+  let totalClaim = claims.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+  document.getElementById('badge-claims').innerText = 'Total: ₹' + fmt(totalClaim);
+  
+  S.taxDataCache = d.tax || [];
+  renderTxnList(S.taxDataCache, 'tax-list');
 }
 
 function loadTax() {
   if(!S.url) return;
   const y = new Date().getFullYear();
+  const cacheKey = `sp_cache_tax_${y}`;
   
-  document.getElementById('claims-list').innerHTML = '<div class="loading-state">Checking claims...</div>';
-  document.getElementById('tax-list').innerHTML = '<div class="loading-state">Checking tax records...</div>';
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try { renderTaxData(JSON.parse(cached)); } catch(e){}
+  } else {
+    document.getElementById('claims-list').innerHTML = '<div class="loading-state">Checking claims...</div>';
+    document.getElementById('tax-list').innerHTML = '<div class="loading-state">Checking tax records...</div>';
+  }
 
   fetchWithTimeout(`${S.url}?action=tax&year=${y}`, {})
     .then(r => r.json())
     .then(d => {
       if(!d.success) throw new Error();
-      let claims = d.claims || [];
-      renderTxnList(claims, 'claims-list');
-      let totalClaim = claims.reduce((sum, t) => sum + parseFloat(t.amount), 0);
-      document.getElementById('badge-claims').innerText = 'Total: ₹' + fmt(totalClaim);
-      
-      S.taxDataCache = d.tax || [];
-      renderTxnList(S.taxDataCache, 'tax-list');
+      localStorage.setItem(cacheKey, JSON.stringify(d));
+      renderTaxData(d);
     }).catch(() => {
-      document.getElementById('claims-list').innerHTML = '<div class="loading-state">Error loading.</div>';
-      document.getElementById('tax-list').innerHTML = '<div class="loading-state">Error loading.</div>';
+      if (!cached) {
+        document.getElementById('claims-list').innerHTML = '<div class="loading-state">Error loading.</div>';
+        document.getElementById('tax-list').innerHTML = '<div class="loading-state">Error loading.</div>';
+      }
     });
 }
 
@@ -472,9 +504,9 @@ function submitTxn() {
       toggleSplit();
       closeModal();
       
-      if(document.getElementById('view-dashboard').classList.contains('active')) loadDashboard();
-      if(document.getElementById('view-history').classList.contains('active')) loadHistory();
-      if(document.getElementById('view-tax').classList.contains('active')) loadTax();
+      if(document.getElementById('view-dashboard').classList.contains('active')) { clearCache(); loadDashboard(); }
+      if(document.getElementById('view-history').classList.contains('active')) { clearCache(); loadHistory(); }
+      if(document.getElementById('view-tax').classList.contains('active')) { clearCache(); loadTax(); }
     }).catch(e => {
       toast('Error: ' + (e.message === 'timeout' ? 'Network timeout' : 'Failed to save'), 'err');
     }).finally(() => {
@@ -488,6 +520,7 @@ function deleteTxn(id) {
     .then(r => r.json()).then(d => {
       if(!d.success) throw new Error(d.error);
       toast('Record Deleted', 'ok');
+      clearCache();
       if(document.getElementById('view-history').classList.contains('active')) loadHistory();
       if(document.getElementById('view-tax').classList.contains('active')) loadTax();
     }).catch(e => toast('Delete failed', 'err'));
@@ -533,6 +566,18 @@ function exportPDF() {
 }
 
 // --- CSV SMART IMPORT ---
+function parseCsvLine(str, delim) {
+  if (delim !== ',') return str.split(delim).map(c => c.replace(/^"|"$/g, '').trim());
+  let result = []; let cur = ''; let inQuote = false;
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '"') inQuote = !inQuote;
+    else if (str[i] === ',' && !inQuote) { result.push(cur.trim()); cur = ''; }
+    else cur += str[i];
+  }
+  result.push(cur.trim());
+  return result;
+}
+
 function processCSV() {
   const fileInput = document.getElementById('csv-file');
   if(!fileInput.files.length) { toast('Please select a CSV file', 'err'); return; }
@@ -556,7 +601,7 @@ function processCSV() {
     let dtIdx = -1, descIdx = -1, amtIdx = -1, debitIdx = -1, creditIdx = -1;
     
     for(let i = 0; i < Math.min(lines.length, 15); i++) {
-      let cols = lines[i].split(delim).map(h => h.toLowerCase().replace(/["']/g, '').trim());
+      let cols = parseCsvLine(lines[i], delim).map(h => h.toLowerCase());
       
       let dIdx = cols.findIndex(h => h.includes('date'));
       let descI = cols.findIndex(h => h.includes('detail') || h.includes('description') || h.includes('particular') || h.includes('narration') || h.includes('remark') || h.includes('transaction') || h.includes('info') || h.includes('summary') || h.includes('memo'));
@@ -578,7 +623,7 @@ function processCSV() {
     // Fallback detection if headers failed
     if (headerLineIdx === -1) {
       headerLineIdx = 0;
-      let cols = lines[1] ? lines[1].split(delim) : [];
+      let cols = lines[1] ? parseCsvLine(lines[1], delim) : [];
       cols.forEach((c, i) => {
         if(c.match(/\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/) && dtIdx === -1) dtIdx = i;
         if(c.match(/^-?\d+(\.\d+)?$/) && amtIdx === -1) amtIdx = i;
@@ -595,7 +640,7 @@ function processCSV() {
       <thead><tr><th>Date</th><th>Details</th><th>Type</th><th>Category</th><th>Amount</th></tr></thead><tbody>`;
     
     for(let i = headerLineIdx + 1; i < lines.length; i++) {
-      let cols = lines[i].split(delim).map(c => c.replace(/^"|"$/g, '').trim());
+      let cols = parseCsvLine(lines[i], delim);
       if(cols.length <= dtIdx) continue;
       
       let rawDate = cols[dtIdx];
@@ -678,13 +723,21 @@ function confirmCSVImport() {
     .then(r => r.json()).then(d => {
       if(!d.success) throw new Error(d.error);
       toast(`Imported ${S.csvParsedRows.length} records!`, 'ok');
+      clearCache();
       document.getElementById('csv-modal').classList.remove('open');
       document.getElementById('csv-file').value = '';
+      if(document.getElementById('view-dashboard').classList.contains('active')) loadDashboard();
+      if(document.getElementById('view-history').classList.contains('active')) loadHistory();
     }).catch(e => toast('Import Failed', 'err'))
     .finally(() => { btn.innerText = 'Import All Valid Rows'; btn.disabled = false; });
 }
 
 // --- UTILS ---
+function clearCache() {
+  const keys = Object.keys(localStorage);
+  keys.forEach(k => { if(k.startsWith('sp_cache_')) localStorage.removeItem(k); });
+}
+
 function fmt(n) { return parseFloat(n).toLocaleString('en-IN', {minimumFractionDigits:0, maximumFractionDigits:2}); }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function animateValue(id, end) { const obj = document.getElementById(id); if(obj) obj.innerText = (end < 0 ? '-' : '') + '₹' + fmt(Math.abs(end)); }
