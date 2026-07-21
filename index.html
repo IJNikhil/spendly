@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#090b10">
-  <title>Spendly Pro</title>
+  <title>Spendly Pro — CA Edition</title>
+  <meta name="description" content="CA-grade personal finance tracker with ITR planning, tax section tracking, and P&L reports for Indian taxpayers.">
   <link rel="manifest" href="manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- jsPDF for PDF Export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
   <link rel="stylesheet" href="css/styles.css">
@@ -29,13 +29,18 @@
         <span>Ledger</span>
       </a>
       
-      <a href="#" class="nav-item" onclick="nav('tax', this)">
+      <a href="#" class="nav-item" onclick="nav('itr', this)">
         <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-        <span>Tax</span>
+        <span>ITR</span>
+      </a>
+
+      <a href="#" class="nav-item" onclick="nav('plreport', this)">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+        <span>P&amp;L</span>
       </a>
       
       <a href="#" class="nav-item" onclick="nav('settings', this)">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         <span>Settings</span>
       </a>
     </div>
@@ -59,15 +64,18 @@
         </div>
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <div class="filters">
-            <select id="dash-month" onchange="clearCache(); loadDashboard()"></select>
-            <select id="dash-year" onchange="clearCache(); loadDashboard()"></select>
+            <select id="dash-month" onchange="clearDashCache(); loadDashboard()"></select>
+            <select id="dash-year" onchange="clearDashCache(); loadDashboard()"></select>
           </div>
           <button class="btn btn-primary desktop-add-btn" onclick="openModal()">
-            <svg viewBox="0 0 24 24" style="width:18px; height:18px; margin-right:6px; stroke:currentColor; fill:none; stroke-width:2.5; display:inline-block; vertical-align:text-bottom;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px;margin-right:6px;stroke:currentColor;fill:none;stroke-width:2.5;display:inline-block;vertical-align:text-bottom;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             New Entry
           </button>
         </div>
       </header>
+
+      <!-- Advance Tax Banner -->
+      <div id="advance-tax-banner" style="display:none;"></div>
       
       <div class="metrics-grid">
         <div class="metric-card"><div class="m-label">Net Cash Flow</div><div class="m-value" id="val-net">₹0</div></div>
@@ -78,10 +86,19 @@
 
       <div class="dash-layout">
         <!-- LEFT COL -->
-        <div class="dash-main" style="display:flex; flex-direction:column; gap:24px;">
+        <div class="dash-main" style="display:flex;flex-direction:column;gap:24px;">
           <div class="card">
             <h2 class="card-title">Expense Breakdown</h2>
             <div class="chart-container"><canvas id="expenseChart"></canvas></div>
+          </div>
+
+          <!-- 80C/80D Tax Savings Progress (FY) -->
+          <div class="card" id="deduction-card">
+            <div class="card-header">
+              <h2 class="card-title">Tax Savings (This FY)</h2>
+              <span class="badge badge-accent" style="font-size:11px;">80C · 80D · 80G</span>
+            </div>
+            <div id="deduction-list"></div>
           </div>
           
           <div class="card" id="budget-card">
@@ -104,7 +121,7 @@
         </div>
         
         <!-- RIGHT COL -->
-        <div class="dash-side" style="display:flex; flex-direction:column; gap:24px;">
+        <div class="dash-side" style="display:flex;flex-direction:column;gap:24px;">
           <div class="card">
             <h2 class="card-title">Recent Activity</h2>
             <div id="recent-list" class="txn-list">
@@ -123,7 +140,7 @@
       </div>
     </div>
 
-    <!-- HISTORY VIEW -->
+    <!-- HISTORY / LEDGER VIEW -->
     <div id="view-history" class="view">
       <header class="page-header">
         <h1>Ledger</h1>
@@ -135,31 +152,48 @@
       <div class="card"><div id="hist-list" class="txn-list"></div></div>
     </div>
 
-    <!-- TAX VIEW -->
-    <div id="view-tax" class="view">
+    <!-- ITR VIEW -->
+    <div id="view-itr" class="view">
       <header class="page-header">
         <div>
-          <h1>Tax & Claims</h1>
-          <p class="subtitle">Track business reimbursements and tax-deductible expenses.</p>
+          <h1>ITR Planner</h1>
+          <p class="subtitle">Income Tax Return — Indian FY (Apr–Mar)</p>
         </div>
-        <button class="btn btn-primary" onclick="exportPDF()">Export PDF</button>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div class="filters">
+            <select id="itr-fy" onchange="loadITR()"></select>
+          </div>
+          <button class="btn btn-primary" onclick="exportITRPDF()">
+            <svg viewBox="0 0 24 24" style="width:16px;height:16px;margin-right:6px;stroke:currentColor;fill:none;stroke-width:2;display:inline-block;vertical-align:text-bottom;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Export PDF
+          </button>
+        </div>
       </header>
-      <div class="dash-layout">
-        <div class="dash-main">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Pending Reimbursements</h2>
-              <div class="badge badge-accent" id="badge-claims">₹0</div>
-            </div>
-            <div id="claims-list" class="txn-list"></div>
-          </div>
+
+      <!-- Regime Tabs -->
+      <div class="regime-tabs">
+        <button class="regime-tab active" id="tab-new" onclick="switchRegime('new')">New Regime <span class="badge badge-accent" style="margin-left:6px;font-size:10px;">Recommended</span></button>
+        <button class="regime-tab" id="tab-old" onclick="switchRegime('old')">Old Regime</button>
+      </div>
+
+      <div id="itr-content">
+        <div class="loading-state">Select a Financial Year to compute your tax.</div>
+      </div>
+    </div>
+
+    <!-- P&L REPORT VIEW -->
+    <div id="view-plreport" class="view">
+      <header class="page-header">
+        <div>
+          <h1>P&amp;L Report</h1>
+          <p class="subtitle">Month-wise Profit &amp; Loss — Indian Financial Year</p>
         </div>
-        <div class="dash-side">
-          <div class="card">
-            <h2 class="card-title">Tax Deductible (This Year)</h2>
-            <div id="tax-list" class="txn-list"></div>
-          </div>
+        <div class="filters">
+          <select id="pl-fy" onchange="loadPLReport()"></select>
         </div>
+      </header>
+      <div id="pl-content">
+        <div class="loading-state">Select a Financial Year above.</div>
       </div>
     </div>
 
@@ -174,23 +208,23 @@
             <label>Apps Script Web App URL</label>
             <input type="url" id="inp-url" placeholder="https://script.google.com/...">
           </div>
-          <button class="btn btn-primary" onclick="saveSettings()">Save & Connect</button>
+          <button class="btn btn-primary" onclick="saveSettings()">Save &amp; Connect</button>
           
-          <hr style="border:none; border-top:1px solid var(--border); margin:24px 0;">
+          <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
           
           <h2 class="card-title">Database Setup (New Users)</h2>
-          <p class="text-muted" style="font-size:13px; margin-bottom:16px;">Spendly uses your personal Google Sheet as a free database. To set it up:</p>
-          <ol style="font-size:13px; margin-left:16px; margin-bottom:16px; color:var(--text); line-height:1.6;">
-            <li style="margin-bottom:6px;">Create a blank <a href="https://sheets.new" target="_blank" style="color:var(--accent); text-decoration:none;">Google Sheet</a>.</li>
+          <p class="text-muted" style="font-size:13px;margin-bottom:16px;">Spendly uses your personal Google Sheet as a free database. To set it up:</p>
+          <ol style="font-size:13px;margin-left:16px;margin-bottom:16px;color:var(--text);line-height:1.6;">
+            <li style="margin-bottom:6px;">Create a blank <a href="https://sheets.new" target="_blank" style="color:var(--accent);text-decoration:none;">Google Sheet</a>.</li>
             <li style="margin-bottom:6px;">Go to <b>Extensions &gt; Apps Script</b>.</li>
             <li style="margin-bottom:6px;">Click the button below to copy the server code, paste it, and hit <b>Deploy &gt; New Deployment</b> (Web App, Access: Anyone).</li>
             <li style="margin-bottom:6px;">Copy the Web App URL it gives you and paste it above!</li>
           </ol>
           <button class="btn full-w" onclick="copyBackendCode()" id="btn-copy-code">Copy Apps Script Code</button>
 
-          <hr style="border:none; border-top:1px solid var(--border); margin:24px 0;">
+          <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
           <h2 class="card-title">Preferences</h2>
-          <div class="toggles-row" style="margin:0; padding:0; background:transparent; border:none;">
+          <div class="toggles-row" style="margin:0;padding:0;background:transparent;border:none;">
             <label class="toggle-switch">
               <input type="checkbox" id="theme-toggle" onchange="toggleTheme()">
               <span class="slider"></span>
@@ -201,8 +235,8 @@
 
         <div class="card max-w-lg">
           <h2 class="card-title">Bank CSV Import (Smart Parser)</h2>
-          <p class="text-muted" style="margin-bottom: 16px; font-size:14px;">Upload your bank statement. Spendly will auto-detect Dates, Amounts, and try to auto-categorize based on merchants.</p>
-          <input type="file" id="csv-file" accept=".csv" class="btn" style="margin-bottom:12px; background:var(--surface-hover);">
+          <p class="text-muted" style="margin-bottom:16px;font-size:14px;">Upload your bank statement. Spendly auto-detects Dates, Debits, Credits and categorizes transactions.</p>
+          <input type="file" id="csv-file" accept=".csv" class="btn" style="margin-bottom:12px;background:var(--surface-hover);">
           <button class="btn btn-primary" onclick="processCSV()">Parse CSV</button>
         </div>
 
@@ -214,7 +248,7 @@
   <div class="modal-overlay" id="add-modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>New Entry</h2>
+        <h2 id="modal-title">New Entry</h2>
         <button class="icon-btn close-btn" onclick="closeModal()">
           <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
@@ -257,11 +291,52 @@
           <input type="text" id="mod-entity" placeholder="e.g. Acme Corp, John Doe">
         </div>
 
-        <div class="toggles-row" style="display:flex; flex-wrap:wrap; gap:16px;">
+        <!-- NEW: Tax Section + Payment Mode Row -->
+        <div class="input-row" id="wrap-tax-section">
+          <div class="input-group flex-1">
+            <label>Tax Section</label>
+            <select id="mod-tax-section">
+              <option value="None">None (Personal)</option>
+              <option value="80C">80C — PF/ELSS/LIC/PPF</option>
+              <option value="80D">80D — Health Insurance</option>
+              <option value="80G">80G — Donation</option>
+              <option value="80E">80E — Education Loan Interest</option>
+              <option value="24b">Section 24(b) — Home Loan Interest</option>
+              <option value="80TTA">80TTA — Savings Interest</option>
+              <option value="80CCD">80CCD(1B) — NPS</option>
+              <option value="HRA">HRA — House Rent</option>
+            </select>
+          </div>
+          <div class="input-group flex-1">
+            <label>Payment Mode</label>
+            <select id="mod-pay-mode">
+              <option value="UPI">UPI</option>
+              <option value="Card">Card</option>
+              <option value="Net Banking">Net Banking / NEFT</option>
+              <option value="Cash">Cash</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Auto-Debit">Auto-Debit</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- NEW: Income Head (shown for income type) -->
+        <div class="input-group" id="wrap-income-head" style="display:none;">
+          <label>Income Head (ITR)</label>
+          <select id="mod-income-head">
+            <option value="Salary">Salary (Section 17)</option>
+            <option value="Business">Business / Profession</option>
+            <option value="STCG">Short Term Capital Gains (STCG)</option>
+            <option value="LTCG">Long Term Capital Gains (LTCG)</option>
+            <option value="Other Sources">Other Sources (Interest / Dividend / Rental)</option>
+          </select>
+        </div>
+
+        <div class="toggles-row" style="display:flex;flex-wrap:wrap;gap:16px;">
           <label class="toggle-switch" id="wrap-tax">
             <input type="checkbox" id="mod-tax">
             <span class="slider"></span>
-            <span class="toggle-label">Tax Deduct</span>
+            <span class="toggle-label">Tax Deductible</span>
           </label>
           <label class="toggle-switch" id="wrap-rec">
             <input type="checkbox" id="mod-rec">
@@ -276,8 +351,8 @@
         </div>
 
         <!-- SPLIT BILL OPTIONS -->
-        <div id="split-box" class="card" style="display:none; margin-top:16px; padding:16px; background:var(--surface-hover);">
-          <h3 style="font-size:14px; margin-bottom:12px;">Who owes you for this?</h3>
+        <div id="split-box" class="card" style="display:none;margin-top:16px;padding:16px;background:var(--surface-hover);">
+          <h3 style="font-size:14px;margin-bottom:12px;">Who owes you for this?</h3>
           <div class="input-row">
             <div class="input-group flex-1" style="margin-bottom:0">
               <input type="text" id="split-name" placeholder="Friend's Name">
@@ -286,10 +361,10 @@
               <input type="number" id="split-amt" placeholder="Owed Amount (₹)">
             </div>
           </div>
-          <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">Their portion will be saved to your Pending Claims.</p>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Their portion will be saved to your Pending Claims.</p>
         </div>
 
-        <button class="btn btn-primary full-w" id="btn-submit" onclick="submitTxn()" style="margin-top: 24px;">
+        <button class="btn btn-primary full-w" id="btn-submit" onclick="submitTxn()" style="margin-top:24px;">
           Save Transaction
         </button>
       </div>
@@ -308,17 +383,19 @@
       <div class="modal-body" id="csv-body">
         <!-- Rendered via JS -->
       </div>
-      <div style="padding:16px; border-top:1px solid var(--border); text-align:right;">
+      <div style="padding:16px;border-top:1px solid var(--border);text-align:right;">
         <button class="btn btn-primary" onclick="confirmCSVImport()">Import All Valid Rows</button>
       </div>
     </div>
   </div>
 
   <div id="toast"></div>
-  <script src="js/app.js?v=2.5"></script>
+  <script src="js/app.js?v=2.6"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister())); if('caches' in window){caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));} window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.3'));
+      navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+      if('caches' in window){caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));}
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.6'));
     }
   </script>
 </body>

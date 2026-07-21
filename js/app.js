@@ -1,30 +1,26 @@
-// Spendly Pro Phase 3 - Frontend Logic
-const APP_VERSION = 'v2.5-alltime';
+// Spendly Pro Phase 4 - CA Grade Frontend
+const APP_VERSION = 'v2.6-ca';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
   type: 'expense',
   chart: null,
   budgets: JSON.parse(localStorage.getItem('sp_budgets') || '{}'),
-  taxDataCache: [], // used for PDF export
-  csvParsedRows: [], // used for bulk import
+  taxDataCache: [],
+  csvParsedRows: [],
   categories: {
     income: ['Salary', 'Bonus', 'Freelance', 'Dividends', 'Other Income'],
     expense: ['Rent/Mortgage', 'Groceries', 'Utilities', 'Transport', 'Subscriptions', 'Dining Out', 'Healthcare', 'Shopping', 'Other Expense'],
-    investment: ['Stock Market', 'Crypto', 'Retirement / 401k', 'Real Estate', 'Savings'],
+    investment: ['Stock Market', 'Mutual Funds', 'Fixed Deposit', 'Crypto', 'PPF', 'NPS', 'Real Estate', 'Savings'],
     business: ['Travel', 'Meals', 'Office Supplies', 'Software', 'Other Business']
-  }
+  },
+  currentRegime: 'new',
+  itrData: null,
+  plData: null
 };
 
 const fetchWithTimeout = (url, options = {}, timeout = 15000) => {
-  const opts = {
-    redirect: 'follow',
-    ...options,
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8',
-      ...(options.headers || {})
-    }
-  };
+  const opts = { redirect: 'follow', ...options, headers: { 'Content-Type': 'text/plain;charset=utf-8', ...(options.headers || {}) } };
   return Promise.race([
     fetch(url, opts),
     new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
@@ -35,53 +31,36 @@ function init() {
   document.getElementById('inp-url').value = S.url;
   document.getElementById('mod-date').valueAsDate = new Date();
   
-  // Theme
   if(localStorage.getItem('sp_theme') === 'light') {
     document.body.classList.add('light-mode');
     document.getElementById('theme-toggle').checked = true;
   }
   
-  // Setup History Selectors
+  const now = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  
+  // Ledger
   const mSel = document.getElementById('hist-month');
   const ySel = document.getElementById('hist-year');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const now = new Date();
-  
-  months.forEach((m, i) => {
-    let opt = document.createElement('option');
-    opt.value = i + 1; opt.text = m;
-    if(i === now.getMonth()) opt.selected = true;
-    mSel.appendChild(opt);
-  });
-  
-  for(let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) {
-    let opt = document.createElement('option'); opt.value = y; opt.text = y;
-    ySel.appendChild(opt);
-  }
+  months.forEach((m, i) => { mSel.appendChild(new Option(m, i+1, false, i === now.getMonth())); });
+  for(let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) ySel.appendChild(new Option(y, y));
 
-  // Setup Dashboard Selectors (with All Time option)
+  // Dashboard
   const dMSel = document.getElementById('dash-month');
   const dYSel = document.getElementById('dash-year');
-  
-  let allOpt = document.createElement('option');
-  allOpt.value = 'all'; allOpt.text = 'All Time';
-  dMSel.appendChild(allOpt);
-  
-  months.forEach((m, i) => {
-    let opt = document.createElement('option');
-    opt.value = i + 1; opt.text = m;
-    if(i === now.getMonth()) opt.selected = true;
-    dMSel.appendChild(opt);
-  });
-  
-  let allYOpt = document.createElement('option');
-  allYOpt.value = 'all'; allYOpt.text = 'All Years';
-  dYSel.appendChild(allYOpt);
-  
-  for(let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) {
-    let opt = document.createElement('option'); opt.value = y; opt.text = y;
-    if(y === now.getFullYear()) opt.selected = true;
-    dYSel.appendChild(opt);
+  dMSel.appendChild(new Option('All Time', 'all'));
+  months.forEach((m, i) => { dMSel.appendChild(new Option(m, i+1, false, i === now.getMonth())); });
+  dYSel.appendChild(new Option('All Years', 'all'));
+  for(let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) dYSel.appendChild(new Option(y, y, false, y === now.getFullYear()));
+
+  // ITR & P&L FY Dropdowns
+  const itrFySel = document.getElementById('itr-fy');
+  const plFySel = document.getElementById('pl-fy');
+  const currentFy = now.getMonth() < 3 ? now.getFullYear() : now.getFullYear() + 1;
+  for(let y = currentFy + 1; y >= currentFy - 4; y--) {
+    let txt = `FY ${y-1}-${y.toString().slice(-2)}`;
+    itrFySel.appendChild(new Option(txt, y, false, y === currentFy));
+    if (plFySel) plFySel.appendChild(new Option(txt, y, false, y === currentFy));
   }
 
   setTxnType('expense');
@@ -89,11 +68,10 @@ function init() {
   if (S.url) {
     nav('dashboard', document.querySelectorAll('.nav-item')[0]);
   } else {
-    nav('settings', document.querySelectorAll('.nav-item')[3]);
+    nav('settings', document.querySelectorAll('.nav-item')[4]);
   }
 }
 
-// --- NAVIGATION & MODALS ---
 function nav(viewId, el) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(v => v.classList.remove('active'));
@@ -103,7 +81,8 @@ function nav(viewId, el) {
 
   if (viewId === 'dashboard') loadDashboard();
   if (viewId === 'history') loadHistory();
-  if (viewId === 'tax') loadTax();
+  if (viewId === 'itr') loadITR();
+  if (viewId === 'plreport') loadPLReport();
 }
 
 function openModal() { 
@@ -112,6 +91,7 @@ function openModal() {
   document.getElementById('btn-submit').removeAttribute('data-edit-id');
 }
 function closeModal() { document.getElementById('add-modal').classList.remove('open'); }
+
 function toggleTheme() {
   const isLight = document.getElementById('theme-toggle').checked;
   if(isLight) {
@@ -121,7 +101,7 @@ function toggleTheme() {
     document.body.classList.remove('light-mode');
     localStorage.setItem('sp_theme', 'dark');
   }
-  if(S.chart) S.chart.update(); // redraw chart with new colors if needed
+  if(S.chart) S.chart.update();
 }
 
 function toggleSplit() {
@@ -136,30 +116,33 @@ function setTxnType(type) {
 
   const catSel = document.getElementById('mod-cat');
   catSel.innerHTML = '';
-  S.categories[type].forEach(c => {
-    let opt = document.createElement('option');
-    opt.value = c; opt.text = c;
-    catSel.appendChild(opt);
-  });
+  S.categories[type].forEach(c => catSel.appendChild(new Option(c, c)));
 
   const entityWrap = document.getElementById('mod-entity-wrap');
   const taxWrap = document.getElementById('wrap-tax');
   const recWrap = document.getElementById('wrap-rec');
   const splitWrap = document.getElementById('wrap-split');
   const lblEntity = document.getElementById('lbl-entity');
+  
+  const taxSecWrap = document.getElementById('wrap-tax-section');
+  const incomeHeadWrap = document.getElementById('wrap-income-head');
 
   if (type === 'business') {
     entityWrap.style.display = 'block'; lblEntity.innerText = 'Employer / Client';
     taxWrap.style.display = 'none'; recWrap.style.display = 'none'; splitWrap.style.display = 'none';
+    taxSecWrap.style.display = 'none'; incomeHeadWrap.style.display = 'none';
   } else if (type === 'income') {
     entityWrap.style.display = 'block'; lblEntity.innerText = 'Source / Company';
     taxWrap.style.display = 'none'; recWrap.style.display = 'block'; splitWrap.style.display = 'none';
+    taxSecWrap.style.display = 'none'; incomeHeadWrap.style.display = 'block';
   } else if (type === 'investment') {
     entityWrap.style.display = 'block'; lblEntity.innerText = 'Brokerage / Asset';
-    taxWrap.style.display = 'none'; recWrap.style.display = 'block'; splitWrap.style.display = 'none';
+    taxWrap.style.display = 'flex'; recWrap.style.display = 'block'; splitWrap.style.display = 'none';
+    taxSecWrap.style.display = 'flex'; incomeHeadWrap.style.display = 'none';
   } else {
     entityWrap.style.display = 'block'; lblEntity.innerText = 'Merchant / Payee';
     taxWrap.style.display = 'flex'; recWrap.style.display = 'flex'; splitWrap.style.display = 'flex';
+    taxSecWrap.style.display = 'flex'; incomeHeadWrap.style.display = 'none';
   }
 }
 
@@ -172,7 +155,7 @@ function saveSettings() {
   nav('dashboard', document.querySelectorAll('.nav-item')[0]);
 }
 
-// --- DATA FETCHING (Offline First Caching) ---
+// --- DASHBOARD & RENDERING ---
 function renderDashboardData(d) {
   animateValue('val-net', d.netFlow); animateValue('val-income', d.income);
   animateValue('val-expense', d.expense); animateValue('val-invest', d.investment);
@@ -181,25 +164,37 @@ function renderDashboardData(d) {
   renderBudgets(d.categories || {});
   renderSubscriptions(d.subscriptions || []);
   renderLoans(d.loans || []);
+  
+  if (d.businessPending > 0) {
+    document.getElementById('advance-tax-banner').style.display = 'flex';
+    document.getElementById('advance-tax-banner').innerHTML = `<div style="background:var(--business-dim); color:var(--business); padding:12px 16px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; border:1px solid var(--business);">
+      <span style="font-weight:600;">You have ₹${fmt(d.businessPending)} in Pending Business Claims.</span>
+      <button class="btn btn-primary" onclick="nav('history', document.querySelectorAll('.nav-item')[1])" style="padding:6px 12px; font-size:12px;">View Ledger</button>
+    </div>`;
+  } else {
+    document.getElementById('advance-tax-banner').style.display = 'none';
+  }
+}
+
+function clearDashCache() {
+  const m = document.getElementById('dash-month').value;
+  const y = document.getElementById('dash-year').value;
+  localStorage.removeItem(`sp_cache_dash_${m}_${y}`);
 }
 
 function loadDashboard() {
   if(!S.url) return;
   const now = new Date();
-  const mSel = document.getElementById('dash-month');
-  const ySel = document.getElementById('dash-year');
-  const m = mSel ? mSel.value : (now.getMonth() + 1);
-  const y = ySel ? ySel.value : now.getFullYear();
+  const m = document.getElementById('dash-month').value;
+  const y = document.getElementById('dash-year').value;
   const isAllTime = (m === 'all' || y === 'all');
-  const cacheKey = isAllTime ? `sp_cache_dash_all` : `sp_cache_dash_${m}_${y}`;
+  const cacheKey = `sp_cache_dash_${m}_${y}`;
 
-  // Update subtitle label
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const label = isAllTime ? 'All Time Overview' : `${months[parseInt(m)-1]} ${y}`;
   const sub = document.getElementById('current-date');
   if(sub) sub.innerText = label;
 
-  // 1. Instantly render from cache if available
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
     try { renderDashboardData(JSON.parse(cached)); } catch(e){}
@@ -207,11 +202,7 @@ function loadDashboard() {
     document.getElementById('recent-list').innerHTML = '<div class="loading-state">Syncing data...</div>';
   }
   
-  // 2. Fetch from backend
-  const url = isAllTime
-    ? `${S.url}?action=dashboard&month=all&year=all`
-    : `${S.url}?action=dashboard&month=${m}&year=${y}`;
-
+  const url = `${S.url}?action=dashboard&month=${m}&year=${y}`;
   fetchWithTimeout(url, {})
     .then(r => r.json())
     .then(d => {
@@ -247,41 +238,216 @@ function loadHistory() {
     });
 }
 
-function renderTaxData(d) {
-  let claims = d.claims || [];
-  renderTxnList(claims, 'claims-list');
-  let totalClaim = claims.reduce((sum, t) => sum + parseFloat(t.amount), 0);
-  document.getElementById('badge-claims').innerText = 'Total: ₹' + fmt(totalClaim);
-  
-  S.taxDataCache = d.tax || [];
-  renderTxnList(S.taxDataCache, 'tax-list');
-}
-
-function loadTax() {
+// --- ITR VIEW (NEW CA LOGIC) ---
+function loadITR() {
   if(!S.url) return;
-  const y = new Date().getFullYear();
-  const cacheKey = `sp_cache_tax_${y}`;
-  
+  const fy = document.getElementById('itr-fy').value;
+  const cacheKey = `sp_cache_itr_${fy}`;
+
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
-    try { renderTaxData(JSON.parse(cached)); } catch(e){}
+    try { S.itrData = JSON.parse(cached); renderITR(S.itrData, S.currentRegime); } catch(e){}
   } else {
-    document.getElementById('claims-list').innerHTML = '<div class="loading-state">Checking claims...</div>';
-    document.getElementById('tax-list').innerHTML = '<div class="loading-state">Checking tax records...</div>';
+    document.getElementById('itr-content').innerHTML = '<div class="loading-state">Computing tax report...</div>';
   }
 
-  fetchWithTimeout(`${S.url}?action=tax&year=${y}`, {})
+  fetchWithTimeout(`${S.url}?action=itr&fy=${fy}`, {})
     .then(r => r.json())
     .then(d => {
-      if(!d.success) throw new Error();
+      if(!d.success) throw new Error(d.error);
       localStorage.setItem(cacheKey, JSON.stringify(d));
-      renderTaxData(d);
-    }).catch(() => {
-      if (!cached) {
-        document.getElementById('claims-list').innerHTML = '<div class="loading-state">Error loading.</div>';
-        document.getElementById('tax-list').innerHTML = '<div class="loading-state">Error loading.</div>';
-      }
+      S.itrData = d;
+      renderITR(d, S.currentRegime);
+    }).catch(e => {
+      if (!cached) document.getElementById('itr-content').innerHTML = '<div class="loading-state">Failed to load ITR data.</div>';
     });
+}
+
+function switchRegime(regime) {
+  S.currentRegime = regime;
+  document.querySelectorAll('.regime-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${regime}`).classList.add('active');
+  if (S.itrData) renderITR(S.itrData, regime);
+}
+
+function calculateTax(income, regime) {
+  let tax = 0;
+  if (regime === 'new') {
+    if (income <= 300000) return 0;
+    if (income <= 700000) return 0; 
+    let rem = income;
+    if (rem > 1500000) { tax += (rem - 1500000) * 0.30; rem = 1500000; }
+    if (rem > 1200000) { tax += (rem - 1200000) * 0.20; rem = 1200000; }
+    if (rem > 900000)  { tax += (rem - 900000) * 0.15; rem = 900000; }
+    if (rem > 600000)  { tax += (rem - 600000) * 0.10; rem = 600000; }
+    if (rem > 300000)  { tax += (rem - 300000) * 0.05; }
+  } else {
+    if (income <= 250000) return 0;
+    if (income <= 500000) return 0;
+    let rem = income;
+    if (rem > 1000000) { tax += (rem - 1000000) * 0.30; rem = 1000000; }
+    if (rem > 500000)  { tax += (rem - 500000) * 0.20; rem = 500000; }
+    if (rem > 250000)  { tax += (rem - 250000) * 0.05; }
+  }
+  return tax + (tax * 0.04); 
+}
+
+function renderITR(d, regime) {
+  const h = d.incomeByHead || {salary:0, business:0, stcg:0, ltcg:0, otherSources:0};
+  const grossSalary = h.salary || 0;
+  let standardDed = (grossSalary > 0) ? Math.min(grossSalary, 50000) : 0;
+  let netSalary = grossSalary - standardDed;
+  
+  let grossTotalIncome = netSalary + (h.business||0) + (h.stcg||0) + (h.ltcg||0) + (h.otherSources||0);
+  
+  let totalDed = 0;
+  let dedDetails = '';
+  
+  if (regime === 'old') {
+    let ded = d.deductions || {c80:0, d80:0, g80:0, sec24b:0, nps80ccd:0};
+    let c80 = Math.min(ded.c80, 150000);
+    let d80 = Math.min(ded.d80, 50000);
+    let g80 = ded.g80; 
+    let sec24b = Math.min(ded.sec24b, 200000);
+    let nps80ccd = Math.min(ded.nps80ccd, 50000);
+    
+    totalDed = c80 + d80 + g80 + sec24b + nps80ccd;
+    
+    dedDetails = `
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between"><span>80C (Max 1.5L):</span> <span>₹${fmt(c80)}</span></div>
+        <div style="display:flex;justify-content:space-between"><span>80D (Health):</span> <span>₹${fmt(d80)}</span></div>
+        <div style="display:flex;justify-content:space-between"><span>80CCD(1B) (NPS):</span> <span>₹${fmt(nps80ccd)}</span></div>
+        <div style="display:flex;justify-content:space-between"><span>Sec 24b (Home Loan Int):</span> <span>₹${fmt(sec24b)}</span></div>
+      </div>
+    `;
+    
+    // Also update Dashboard Tax Savings Card
+    const dashDeds = document.getElementById('deduction-list');
+    if (dashDeds) {
+      let pct80c = Math.min((c80/150000)*100, 100);
+      dashDeds.innerHTML = `
+        <div class="budget-row">
+          <div class="budget-header"><span>Section 80C</span><span>₹${fmt(c80)} / ₹1.5L</span></div>
+          <div class="progress-bar-bg"><div class="progress-bar-fill progress-safe" style="width:${pct80c}%"></div></div>
+        </div>
+      `;
+    }
+  } else {
+    dedDetails = `<div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Chapter VI-A Deductions are NOT allowed in the New Regime. Standard deduction of ₹50k is applied.</div>`;
+  }
+  
+  let taxableIncome = Math.max(0, grossTotalIncome - totalDed);
+  let computedTax = calculateTax(taxableIncome, regime);
+
+  const html = `
+    <div class="dash-layout">
+      <div class="dash-main">
+        <div class="card">
+          <h2 class="card-title">Income Computation (FY ${d.fy-1}-${String(d.fy).slice(-2)})</h2>
+          <div class="budget-row"><div class="budget-header"><span>Income from Salary (Gross)</span><span>₹${fmt(grossSalary)}</span></div></div>
+          <div class="budget-row"><div class="budget-header"><span>Less: Standard Deduction</span><span style="color:var(--expense)">-₹${fmt(standardDed)}</span></div></div>
+          <div class="budget-row"><div class="budget-header"><span style="font-weight:600">Net Salary</span><span style="font-weight:600">₹${fmt(netSalary)}</span></div></div>
+          
+          <div class="budget-row" style="margin-top:12px;"><div class="budget-header"><span>Income from Business / Profession</span><span>₹${fmt(h.business)}</span></div></div>
+          <div class="budget-row"><div class="budget-header"><span>Short Term Capital Gains (STCG)</span><span>₹${fmt(h.stcg)}</span></div></div>
+          <div class="budget-row"><div class="budget-header"><span>Long Term Capital Gains (LTCG)</span><span>₹${fmt(h.ltcg)}</span></div></div>
+          <div class="budget-row"><div class="budget-header"><span>Income from Other Sources</span><span>₹${fmt(h.otherSources)}</span></div></div>
+          
+          <hr style="border:none; border-top:1px solid var(--border); margin:16px 0;">
+          <div class="budget-row"><div class="budget-header"><span style="font-weight:600;font-size:16px;">Gross Total Income</span><span style="font-weight:600;font-size:16px;color:var(--income)">₹${fmt(grossTotalIncome)}</span></div></div>
+        </div>
+      </div>
+      
+      <div class="dash-side">
+        <div class="card">
+          <h2 class="card-title">Deductions & Tax</h2>
+          ${dedDetails}
+          <div class="budget-row"><div class="budget-header"><span style="font-weight:600;">Total Deductions</span><span style="color:var(--expense); font-weight:600;">-₹${fmt(totalDed)}</span></div></div>
+          <hr style="border:none; border-top:1px dashed var(--border); margin:12px 0;">
+          <div class="budget-row"><div class="budget-header"><span style="font-weight:600; font-size:16px;">Taxable Income</span><span style="font-weight:600; font-size:16px;">₹${fmt(taxableIncome)}</span></div></div>
+          <div class="budget-row" style="margin-top:16px; background:var(--surface-hover); padding:16px; border-radius:8px; border:1px solid var(--border);">
+            <div class="budget-header" style="margin-bottom:0;"><span style="font-weight:700; font-size:18px;">Estimated Tax</span><span style="font-weight:700; font-size:18px; color:var(--expense);">₹${fmt(computedTax)}</span></div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">* Includes 4% Health & Education Cess. Rebate 87A applied if eligible. STCG/LTCG taxed at slab for demo purposes.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('itr-content').innerHTML = html;
+}
+
+// --- P&L REPORT VIEW ---
+function loadPLReport() {
+  if(!S.url) return;
+  const fy = document.getElementById('pl-fy').value;
+  const cacheKey = `sp_cache_pl_${fy}`;
+
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try { S.plData = JSON.parse(cached); renderPL(S.plData); } catch(e){}
+  } else {
+    document.getElementById('pl-content').innerHTML = '<div class="loading-state">Generating P&L Report...</div>';
+  }
+
+  fetchWithTimeout(`${S.url}?action=plreport&fy=${fy}`, {})
+    .then(r => r.json())
+    .then(d => {
+      if(!d.success) throw new Error(d.error);
+      localStorage.setItem(cacheKey, JSON.stringify(d));
+      S.plData = d;
+      renderPL(d);
+    }).catch(e => {
+      if (!cached) document.getElementById('pl-content').innerHTML = '<div class="loading-state">Failed to load P&L data.</div>';
+    });
+}
+
+function renderPL(d) {
+  let totalInc = 0, totalExp = 0, totalInv = 0;
+  
+  let tableRows = d.report.map(m => {
+    totalInc += m.income; totalExp += m.expense; totalInv += m.investment;
+    let net = m.income - m.expense;
+    let monthName = new Date(m.year, m.month - 1).toLocaleString('en-US', {month: 'short'});
+    return `
+      <tr>
+        <td>${monthName} ${m.year}</td>
+        <td style="color:var(--income)">₹${fmt(m.income)}</td>
+        <td style="color:var(--expense)">₹${fmt(m.expense)}</td>
+        <td style="color:var(--invest)">₹${fmt(m.investment)}</td>
+        <td style="font-weight:600; color:${net >= 0 ? 'var(--income)' : 'var(--expense)'}">₹${fmt(net)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  let totalNet = totalInc - totalExp;
+
+  const html = `
+    <div class="card" style="margin-bottom:24px;">
+      <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom:0; padding:12px; gap:16px;">
+        <div><div class="m-label">Total Revenue</div><div class="m-value txt-income">₹${fmt(totalInc)}</div></div>
+        <div><div class="m-label">Total Expenses</div><div class="m-value txt-expense">₹${fmt(totalExp)}</div></div>
+        <div><div class="m-label">Net Profit / Loss</div><div class="m-value" style="color:${totalNet>=0?'var(--income)':'var(--expense)'}">₹${fmt(totalNet)}</div></div>
+      </div>
+    </div>
+    <div class="card" style="overflow-x:auto;">
+      <table class="csv-table" style="width:100%; min-width:600px;">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th>Income</th>
+            <th>Expense</th>
+            <th>Investment</th>
+            <th>Net Cash Flow</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('pl-content').innerHTML = html;
 }
 
 // --- RENDERING (Core) ---
@@ -347,7 +513,7 @@ function renderChart(catData) {
       labels: labels,
       datasets: [{
         data: data,
-        backgroundColor: ['#ff4757', '#ffa502', '#2ed573', '#1e90ff', '#3742fa', '#ff5285'],
+        backgroundColor: ['#ff4757', '#ffa502', '#2ed573', '#1e90ff', '#3742fa', '#ff5285', '#9b59b6', '#34495e'],
         borderWidth: 0, hoverOffset: 4
       }]
     },
@@ -358,7 +524,6 @@ function renderChart(catData) {
   });
 }
 
-// --- PHASE 3 RENDERING (Budgets, Subs, Loans) ---
 function promptSetBudget() {
   let cat = prompt('Enter exact Category name to budget (e.g. Dining Out):');
   if(!cat) return;
@@ -416,7 +581,7 @@ function renderSubscriptions(subs) {
 
 function promptAddLoan() {
   if(!S.url) { toast('Connect API first', 'err'); return; }
-  let name = prompt('Loan Name (e.g. Car Loan):');
+  let name = prompt('Loan Name (e.g. Home Loan):');
   let prin = prompt('Total Principal Amount (₹):');
   let emi = prompt('Monthly EMI (₹):');
   let months = prompt('Total Duration (Months):');
@@ -437,12 +602,12 @@ function payLoan(id, emiAmt, name) {
   
   fetchWithTimeout(S.url, { method: 'POST', body: JSON.stringify({action: 'payLoan', id: id}) })
     .then(r => r.json()).then(d => {
-      // Also automatically log this as an expense
       let dt = new Date();
       let payload = {
         action: 'add', id: 'tx_' + Date.now().toString(36), type: 'expense',
-        amount: emiAmt, category: 'Other Expense', title: `EMI: ${name}`,
+        amount: emiAmt, category: 'Rent/Mortgage', title: `EMI: ${name}`,
         entity: 'Bank', taxDeductible: false, status: '', recurring: true,
+        taxSection: '24b', paymentMode: 'Auto-Debit', incomeHead: '',
         date: dt.toISOString(),
         dateStr: dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}),
         timeStr: new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'})
@@ -492,6 +657,10 @@ function submitTxn() {
   let isRec = document.getElementById('mod-rec').checked;
   let isSplit = document.getElementById('mod-split').checked;
   
+  let taxSec = document.getElementById('mod-tax-section').value;
+  let payMode = document.getElementById('mod-pay-mode').value;
+  let incomeH = document.getElementById('mod-income-head').value;
+
   let dateStr = dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
   let timeStr = new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'});
 
@@ -504,6 +673,9 @@ function submitTxn() {
       taxDeductible: (S.type === 'expense' && isTax),
       status: (S.type === 'business') ? 'Pending' : '',
       recurring: isRec,
+      taxSection: (S.type === 'expense' || S.type === 'investment') ? taxSec : 'None',
+      paymentMode: payMode,
+      incomeHead: (S.type === 'income') ? incomeH : '',
       date: dt.toISOString(), dateStr: dateStr, timeStr: timeStr
     };
     
@@ -519,9 +691,11 @@ function submitTxn() {
         document.getElementById('mod-title').value = '';
         document.getElementById('mod-entity').value = '';
         closeModal();
-        if(document.getElementById('view-dashboard').classList.contains('active')) { clearCache(); loadDashboard(); }
-        if(document.getElementById('view-history').classList.contains('active')) { clearCache(); loadHistory(); }
-        if(document.getElementById('view-tax').classList.contains('active')) { clearCache(); loadTax(); }
+        clearCache();
+        if(document.getElementById('view-dashboard').classList.contains('active')) loadDashboard();
+        if(document.getElementById('view-history').classList.contains('active')) loadHistory();
+        if(document.getElementById('view-itr').classList.contains('active')) loadITR();
+        if(document.getElementById('view-plreport').classList.contains('active')) loadPLReport();
       }).catch(e => {
         toast('Error: ' + (e.message === 'timeout' ? 'Network timeout' : 'Failed to update'), 'err');
       }).finally(() => {
@@ -547,6 +721,7 @@ function submitTxn() {
       amount: amt - splitAmt, category: document.getElementById('mod-cat').value,
       title: document.getElementById('mod-title').value, entity: document.getElementById('mod-entity').value,
       taxDeductible: isTax, status: '', recurring: isRec,
+      taxSection: taxSec, paymentMode: payMode, incomeHead: '',
       date: dt.toISOString(), dateStr: dateStr, timeStr: timeStr
     });
     
@@ -556,6 +731,7 @@ function submitTxn() {
       amount: splitAmt, category: 'Other Business',
       title: `Split: ${document.getElementById('mod-title').value}`, entity: splitName,
       taxDeductible: false, status: 'Pending', recurring: false,
+      taxSection: 'None', paymentMode: payMode, incomeHead: '',
       date: dt.toISOString(), dateStr: dateStr, timeStr: timeStr
     });
   } else {
@@ -566,6 +742,9 @@ function submitTxn() {
       taxDeductible: (S.type === 'expense' && isTax),
       status: (S.type === 'business') ? 'Pending' : '',
       recurring: isRec,
+      taxSection: (S.type === 'expense' || S.type === 'investment') ? taxSec : 'None',
+      paymentMode: payMode,
+      incomeHead: (S.type === 'income') ? incomeH : '',
       date: dt.toISOString(), dateStr: dateStr, timeStr: timeStr
     });
   }
@@ -573,7 +752,6 @@ function submitTxn() {
   let btn = document.getElementById('btn-submit');
   btn.innerText = 'Saving...'; btn.disabled = true;
 
-  // We use addBulk since we might have 1 or 2 transactions (due to split)
   fetchWithTimeout(S.url, { method: 'POST', body: JSON.stringify({action: 'addBulk', transactions: txns}) })
     .then(r => r.json()).then(d => {
       if(!d.success) throw new Error(d.error);
@@ -587,9 +765,11 @@ function submitTxn() {
       toggleSplit();
       closeModal();
       
-      if(document.getElementById('view-dashboard').classList.contains('active')) { clearCache(); loadDashboard(); }
-      if(document.getElementById('view-history').classList.contains('active')) { clearCache(); loadHistory(); }
-      if(document.getElementById('view-tax').classList.contains('active')) { clearCache(); loadTax(); }
+      clearCache();
+      if(document.getElementById('view-dashboard').classList.contains('active')) loadDashboard();
+      if(document.getElementById('view-history').classList.contains('active')) loadHistory();
+      if(document.getElementById('view-itr').classList.contains('active')) loadITR();
+      if(document.getElementById('view-plreport').classList.contains('active')) loadPLReport();
     }).catch(e => {
       toast('Error: ' + (e.message === 'timeout' ? 'Network timeout' : 'Failed to save'), 'err');
     }).finally(() => {
@@ -605,7 +785,8 @@ function deleteTxn(id) {
       toast('Record Deleted', 'ok');
       clearCache();
       if(document.getElementById('view-history').classList.contains('active')) loadHistory();
-      if(document.getElementById('view-tax').classList.contains('active')) loadTax();
+      if(document.getElementById('view-itr').classList.contains('active')) loadITR();
+      if(document.getElementById('view-plreport').classList.contains('active')) loadPLReport();
     }).catch(e => toast('Delete failed', 'err'));
 }
 
@@ -613,12 +794,15 @@ function editTxn(id) {
   let txn = null;
   const m = document.getElementById('hist-month').value || (new Date().getMonth() + 1);
   const y = document.getElementById('hist-year').value || new Date().getFullYear();
-  let caches = [`sp_cache_hist_${m}_${y}`, `sp_cache_dash_${m}_${y}`, `sp_cache_tax_${y}`];
+  let caches = [
+    `sp_cache_hist_${m}_${y}`, `sp_cache_dash_${m}_${y}`, 
+    `sp_cache_dash_all_all`, `sp_cache_itr_${y}`, `sp_cache_pl_${y}`
+  ];
   
   for(let key of caches) {
     let d = JSON.parse(localStorage.getItem(key) || 'null');
     if (d) {
-       let list = d.transactions || d.recent || d.claims || d.tax || (Array.isArray(d) ? d : []);
+       let list = d.transactions || d.recent || (Array.isArray(d) ? d : []);
        txn = list.find(t => t.id === id);
        if (txn) break;
     }
@@ -635,6 +819,10 @@ function editTxn(id) {
   document.getElementById('mod-tax').checked = (txn.taxDeductible === 'TRUE');
   document.getElementById('mod-rec').checked = (txn.recurring === 'TRUE');
   
+  if (txn.taxSection) document.getElementById('mod-tax-section').value = txn.taxSection;
+  if (txn.paymentMode) document.getElementById('mod-pay-mode').value = txn.paymentMode;
+  if (txn.incomeHead) document.getElementById('mod-income-head').value = txn.incomeHead;
+  
   document.getElementById('btn-submit').setAttribute('data-edit-id', txn.id);
   
   document.getElementById('add-modal').classList.add('open'); 
@@ -646,42 +834,58 @@ function settleTxn(id) {
     .then(r => r.json()).then(d => {
       if(!d.success) throw new Error(d.error);
       toast('Claim Marked Settled', 'ok');
-      if(document.getElementById('view-tax').classList.contains('active')) loadTax();
+      clearCache();
+      if(document.getElementById('view-dashboard').classList.contains('active')) loadDashboard();
+      if(document.getElementById('view-history').classList.contains('active')) loadHistory();
     }).catch(e => toast('Update failed', 'err'));
 }
 
-// --- PDF EXPORT (jsPDF) ---
-function exportPDF() {
-  if (!S.taxDataCache || S.taxDataCache.length === 0) {
-    toast('No Tax records found to export', 'err'); return;
-  }
+function exportITRPDF() {
+  if (!S.itrData) { toast('Load ITR data first', 'err'); return; }
   const doc = new window.jspdf.jsPDF();
-  
   doc.setFontSize(18);
-  doc.text(`Spendly Pro - Tax Deductible Report (${new Date().getFullYear()})`, 14, 22);
-  
+  doc.text(`Spendly Pro - ITR Computation (FY ${S.itrData.fy-1}-${String(S.itrData.fy).slice(-2)})`, 14, 22);
   doc.setFontSize(11);
-  doc.setTextColor(100);
-  let total = S.taxDataCache.reduce((s,t) => s + parseFloat(t.amount), 0);
-  doc.text(`Total Tax Deductible: Rs. ${total.toFixed(2)}`, 14, 30);
+  doc.text(`Regime: ${S.currentRegime.toUpperCase()} | Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
   
-  let tableData = S.taxDataCache.map(t => [
-    t.dateStr, t.category, t.title || '-', t.entity || '-', `Rs. ${t.amount}`
-  ]);
+  let d = S.itrData;
+  let h = d.incomeByHead;
+  let gSal = h.salary || 0;
+  let sDed = (gSal>0)?Math.min(gSal,50000):0;
+  let nSal = gSal - sDed;
+  let gti = nSal + (h.business||0) + (h.stcg||0) + (h.ltcg||0) + (h.otherSources||0);
   
+  let ded = d.deductions || {};
+  let totalDed = 0;
+  if(S.currentRegime === 'old') {
+    totalDed = Math.min(ded.c80,150000) + Math.min(ded.d80,50000) + ded.g80 + Math.min(ded.sec24b,200000) + Math.min(ded.nps80ccd,50000);
+  }
+  let taxable = Math.max(0, gti - totalDed);
+  let tax = calculateTax(taxable, S.currentRegime);
+
   doc.autoTable({
     startY: 40,
-    head: [['Date', 'Category', 'Description', 'Merchant', 'Amount']],
-    body: tableData,
+    head: [['Particulars', 'Amount (Rs.)']],
+    body: [
+      ['Income from Salary (Gross)', fmt(gSal)],
+      ['Less: Standard Deduction', '- ' + fmt(sDed)],
+      ['Income from Business/Profession', fmt(h.business||0)],
+      ['Short Term Capital Gains (STCG)', fmt(h.stcg||0)],
+      ['Long Term Capital Gains (LTCG)', fmt(h.ltcg||0)],
+      ['Income from Other Sources', fmt(h.otherSources||0)],
+      ['GROSS TOTAL INCOME', fmt(gti)],
+      ['Less: Chapter VI-A Deductions', '- ' + fmt(totalDed)],
+      ['TOTAL TAXABLE INCOME', fmt(taxable)],
+      ['COMPUTED TAX LIABILITY (Inc. Cess)', fmt(tax)]
+    ],
     theme: 'grid',
     headStyles: { fillColor: [67, 97, 238] }
   });
   
-  doc.save(`Spendly_Tax_Report_${new Date().getFullYear()}.pdf`);
+  doc.save(`Spendly_ITR_Report_FY${S.itrData.fy}.pdf`);
 }
 
 // --- CSV SMART IMPORT ---
-// Full RFC-4180 compliant CSV parser — handles embedded newlines/commas in quoted fields
 function parseFullCSV(text, delim) {
   let rows = [], row = [], cur = '', inQ = false;
   for (let i = 0; i < text.length; i++) {
@@ -704,18 +908,6 @@ function parseFullCSV(text, delim) {
   return rows;
 }
 
-function parseCsvLine(str, delim) {
-  if (delim !== ',') return str.split(delim).map(c => c.replace(/^"|"$/g, '').trim());
-  let result = []; let cur = ''; let inQuote = false;
-  for (let i = 0; i < str.length; i++) {
-    if (str[i] === '"') inQuote = !inQuote;
-    else if (str[i] === ',' && !inQuote) { result.push(cur.trim()); cur = ''; }
-    else cur += str[i];
-  }
-  result.push(cur.trim());
-  return result;
-}
-
 function processCSV() {
   const fileInput = document.getElementById('csv-file');
   if(!fileInput.files.length) { toast('Please select a CSV file', 'err'); return; }
@@ -725,18 +917,14 @@ function processCSV() {
   
   reader.onload = function(e) {
     const text = e.target.result;
-
-    // Sniff delimiter from first 500 chars
     let head = text.substring(0, 500);
     let delim = ',';
     if ((head.match(/\t/g) || []).length > (head.match(/,/g) || []).length) delim = '\t';
     else if ((head.match(/;/g) || []).length > (head.match(/,/g) || []).length) delim = ';';
 
-    // Parse FULL file respecting quoted multi-line fields
     let allRows = parseFullCSV(text, delim);
     if (allRows.length < 2) { toast('CSV is empty or invalid', 'err'); return; }
 
-    // Find header row in first 15 rows
     let headerRowIdx = -1;
     let dtIdx = -1, descIdx = -1, amtIdx = -1, debitIdx = -1, creditIdx = -1;
 
@@ -756,12 +944,8 @@ function processCSV() {
 
     if (headerRowIdx === -1 || dtIdx === -1 || (amtIdx === -1 && debitIdx === -1 && creditIdx === -1)) {
       toast('Could not detect columns. Ensure CSV has Date, Debit, Credit headers.', 'err');
-      console.log('[CSV] Sample rows:', allRows.slice(0, 4));
       return;
     }
-
-    console.log('[CSV] Header row:', allRows[headerRowIdx]);
-    console.log('[CSV] date:', dtIdx, 'desc:', descIdx, 'debit:', debitIdx, 'credit:', creditIdx);
 
     S.csvParsedRows = [];
     let html = `<div class="csv-table-wrapper"><table class="csv-table">
@@ -799,7 +983,6 @@ function processCSV() {
       else if (lowerDesc.includes('hospital') || lowerDesc.includes('pharmacy') || lowerDesc.includes('medical')) cat = 'Healthcare';
       else if (lowerDesc.includes('amazon') || lowerDesc.includes('flipkart') || lowerDesc.includes('myntra')) cat = 'Shopping';
 
-      // Parse DD/MM/YYYY (Indian bank format)
       let dt = new Date();
       if (rawDate.includes('/') || rawDate.includes('-')) {
         let parts = rawDate.trim().split(/[-/]/);
@@ -817,6 +1000,7 @@ function processCSV() {
         type, amount: displayAmt, category: cat,
         title: rawDesc.replace(/\s+/g, ' ').substring(0, 45),
         entity: 'Bank Import', taxDeductible: false, status: '', recurring: false,
+        taxSection: 'None', paymentMode: 'Net Banking', incomeHead: type==='income'?'Other Sources':'',
         date: dt.toISOString(),
         dateStr: dt.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}),
         timeStr: '12:00 PM'
@@ -835,16 +1019,14 @@ function processCSV() {
     }
 
     if (S.csvParsedRows.length === 0) {
-      toast('No valid rows found. Check Debit/Credit columns have numbers.', 'err');
-      console.log('[CSV] Header:', allRows[headerRowIdx]);
-      console.log('[CSV] First data rows:', allRows.slice(headerRowIdx + 1, headerRowIdx + 5));
+      toast('No valid rows found. Check Debit/Credit columns.', 'err');
       return;
     }
 
     html += '</tbody></table></div>';
     document.getElementById('csv-body').innerHTML = html;
     document.getElementById('csv-modal').classList.add('open');
-    toast(`Parsed ${S.csvParsedRows.length} transactions. Review and import!`, 'ok');
+    toast(`Parsed ${S.csvParsedRows.length} transactions.`, 'ok');
   };
   reader.readAsText(file);
 }
@@ -891,205 +1073,8 @@ function toast(msg, cls) {
   clearTimeout(_tt); _tt = setTimeout(() => el.className = '', 3000);
 }
 
-const BACKEND_CODE = `// Spendly Pro Backend - Apps Script (Phase 3)
-
-function doPost(e) {
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(10000); } catch (e) { return error('System busy, please try again later.'); }
-
-  try {
-    var d = JSON.parse(e.postData.contents);
-    var action = d.action;
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    
-    var ts = ss.getSheetByName('Transactions');
-    if (!ts) {
-      ts = ss.insertSheet('Transactions');
-      ts.appendRow(['ID', 'Date', 'Time', 'Type', 'Amount', 'Category', 'Title', 'Entity', 'TaxDeductible', 'Status', 'Month', 'Year', 'Week', 'Recurring']);
-      ts.getRange(1,1,1,14).setFontWeight('bold').setBackground('#0a0d14').setFontColor('#ffffff');
-      ts.setFrozenRows(1);
-    }
-
-    var ls = ss.getSheetByName('Loans');
-    if (!ls) {
-      ls = ss.insertSheet('Loans');
-      ls.appendRow(['ID', 'Name', 'Principal', 'MonthlyEMI', 'TotalMonths', 'PaidMonths']);
-      ls.getRange(1,1,1,6).setFontWeight('bold').setBackground('#9b59b6').setFontColor('#ffffff');
-      ls.setFrozenRows(1);
-    }
-
-    if (action === 'add') {
-      var dt = new Date(d.date);
-      ts.appendRow([
-        d.id, d.dateStr, d.timeStr, d.type, parseFloat(d.amount), 
-        d.category || '', d.title || '', d.entity || '', d.taxDeductible ? 'TRUE' : 'FALSE', d.status || '', 
-        dt.getMonth()+1, dt.getFullYear(), weekNum(dt), d.recurring ? 'TRUE' : 'FALSE'
-      ]);
-      return success({msg: 'Transaction Added'});
-    } 
-    
-    if (action === 'addBulk') {
-      var rows = [];
-      for(var i=0; i<d.transactions.length; i++) {
-        var txn = d.transactions[i];
-        var dt = new Date(txn.date);
-        rows.push([
-          txn.id, txn.dateStr, txn.timeStr, txn.type, parseFloat(txn.amount),
-          txn.category || '', txn.title || '', txn.entity || '', txn.taxDeductible ? 'TRUE' : 'FALSE', txn.status || '',
-          dt.getMonth()+1, dt.getFullYear(), weekNum(dt), txn.recurring ? 'TRUE' : 'FALSE'
-        ]);
-      }
-      if(rows.length > 0) ts.getRange(ts.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-      return success({msg: rows.length + ' Transactions Added'});
-    }
-
-    if (action === 'delete') {
-      var row = findRowById(ts, d.id);
-      if (row > 0) { ts.deleteRow(row); return success({msg: 'Transaction Deleted'}); }
-      return error('Transaction not found');
-    }
-
-    if (action === 'settle') {
-      var row = findRowById(ts, d.id);
-      if (row > 0) { ts.getRange(row, 10).setValue('Settled'); return success({msg: 'Marked as Settled'}); }
-      return error('Transaction not found');
-    }
-
-    if (action === 'addLoan') {
-      ls.appendRow([d.id, d.name, parseFloat(d.principal), parseFloat(d.emi), parseInt(d.totalMonths), parseInt(d.paidMonths || 0)]);
-      return success({msg: 'Loan Added'});
-    }
-    
-    if (action === 'payLoan') {
-      var row = findRowById(ls, d.id);
-      if (row > 0) {
-        var currentPaid = parseInt(ls.getRange(row, 6).getValue()) || 0;
-        ls.getRange(row, 6).setValue(currentPaid + 1);
-        return success({msg: 'Loan Payment Recorded'});
-      }
-      return error('Loan not found');
-    }
-
-    return error('Invalid action');
-  } catch(err) {
-    return error(err.toString());
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function findRowById(sheet, id) {
-  var data = sheet.getRange(2, 1, sheet.getLastRow(), 1).getValues();
-  for (var i = 0; i < data.length; i++) { if (String(data[i][0]) === String(id)) return i + 2; }
-  return -1;
-}
-
-function doGet(e) {
-  try {
-    var action = e.parameter.action || '';
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var ts = ss.getSheetByName('Transactions');
-    var ls = ss.getSheetByName('Loans');
-    
-    var data = (ts && ts.getLastRow() >= 2) ? ts.getDataRange().getValues() : [];
-    var loanData = (ls && ls.getLastRow() >= 2) ? ls.getDataRange().getValues() : [];
-
-    if (action === 'dashboard') {
-      var month = parseInt(e.parameter.month);
-      var year = parseInt(e.parameter.year);
-      var income = 0, expense = 0, investment = 0, businessPending = 0;
-      var recent = [], categoryTotals = {}, subscriptions = [];
-      
-      for (var i = data.length - 1; i >= 1; i--) {
-        var rowType = String(data[i][3]).toLowerCase();
-        var rowAmt = parseFloat(data[i][4]) || 0;
-        var rowM = parseInt(data[i][10]), rowY = parseInt(data[i][11]);
-        var isRecurring = String(data[i][13]).toUpperCase() === 'TRUE';
-        
-        if (rowType === 'business' && String(data[i][9]).toLowerCase() === 'pending') businessPending += rowAmt;
-
-        if (rowM === month && rowY === year) {
-          if (rowType === 'income') income += rowAmt;
-          if (rowType === 'expense') { expense += rowAmt; var cat = String(data[i][5]); categoryTotals[cat] = (categoryTotals[cat] || 0) + rowAmt; }
-          if (rowType === 'investment') investment += rowAmt;
-          if (recent.length < 5) recent.push(rowToObj(data[i]));
-          if (isRecurring && rowType === 'expense') subscriptions.push(rowToObj(data[i]));
-        }
-      }
-      
-      var activeLoans = [];
-      for(var i = 1; i < loanData.length; i++) {
-        activeLoans.push({
-          id: loanData[i][0], name: loanData[i][1], principal: loanData[i][2],
-          emi: loanData[i][3], totalMonths: loanData[i][4], paidMonths: loanData[i][5]
-        });
-      }
-
-      return success({
-        income: income, expense: expense, investment: investment, businessPending: businessPending,
-        netFlow: income - expense, categories: categoryTotals, recent: recent,
-        subscriptions: subscriptions, loans: activeLoans
-      });
-    }
-
-    if (action === 'history') {
-      var month = parseInt(e.parameter.month);
-      var year = parseInt(e.parameter.year);
-      var results = [];
-      for (var i = data.length - 1; i >= 1; i--) {
-        if (parseInt(data[i][10]) === month && parseInt(data[i][11]) === year) results.push(rowToObj(data[i]));
-      }
-      return success({transactions: results});
-    }
-
-    if (action === 'tax') {
-      var year = parseInt(e.parameter.year);
-      var claims = [], tax = [];
-      for (var i = data.length - 1; i >= 1; i--) {
-        if (String(data[i][3]).toLowerCase() === 'business' && String(data[i][9]).toLowerCase() === 'pending') claims.push(rowToObj(data[i]));
-        if (parseInt(data[i][11]) === year && String(data[i][8]).toUpperCase() === 'TRUE') tax.push(rowToObj(data[i]));
-      }
-      return success({claims: claims, tax: tax});
-    }
-
-    return success({msg: 'Spendly Pro API Phase 3'});
-  } catch(err) { return error(err.toString()); }
-}
-
-function rowToObj(row) {
-  return { id: row[0], dateStr: row[1], timeStr: row[2], type: row[3], amount: row[4], category: row[5], title: row[6], entity: row[7], taxDeductible: row[8], status: row[9], recurring: row[13] };
-}
-
-function success(data) { data.success = true; return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
-function error(msg) { return ContentService.createTextOutput(JSON.stringify({success: false, error: msg})).setMimeType(ContentService.MimeType.JSON); }
-function weekNum(d) { var j = new Date(d.getFullYear(),0,1); return Math.ceil((((d-j)/86400000)+j.getDay()+1)/7); }`;
-
 function copyBackendCode() {
-  let btn = document.getElementById('btn-copy-code');
-  if(navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(BACKEND_CODE).then(() => {
-      btn.innerText = 'Copied to Clipboard! ✓';
-      toast('Code copied. Paste into Apps Script!', 'ok');
-      setTimeout(() => { btn.innerText = 'Copy Apps Script Code'; }, 3000);
-    });
-  } else {
-    // Fallback for non-HTTPS local testing or Safari strict blocking
-    let ta = document.createElement('textarea');
-    ta.value = BACKEND_CODE;
-    ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    try {
-      document.execCommand('copy');
-      btn.innerText = 'Copied to Clipboard! ✓';
-      toast('Code copied. Paste into Apps Script!', 'ok');
-      setTimeout(() => { btn.innerText = 'Copy Apps Script Code'; }, 3000);
-    } catch (err) {
-      toast('Copy failed. Open AppsScript.js manually.', 'err');
-    }
-    document.body.removeChild(ta);
-  }
+  toast('Please see AppsScript.js for the complete backend code!', 'ok');
 }
 
 init();
