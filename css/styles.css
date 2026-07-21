@@ -198,7 +198,7 @@ body.light-mode .nav-bar { background: rgba(255, 255, 255, 0.8); }
   .nav-add-btn {
     order: 2; /* Move right under logo */
     flex-direction: row; align-items: center; justify-content: center; gap: 6px;
-    margin: 0 12px 24px 12px; padding: 8px 16px; border-radius: var(--r-md);
+    margin: 0 12px 24px 12px; height: 36px; padding: 0 16px; border-radius: var(--r-md);
     background: var(--accent); color: white; border: none;
     cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: none; /* Solid, no glow */
