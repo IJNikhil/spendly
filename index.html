@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#090b10">
+  <title>Spendly Pro</title>
+  <link rel="manifest" href="manifest.json">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- jsPDF for PDF Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  
+  <nav class="nav-bar">
+    <div class="logo">spendly<span style="color:var(--accent)">.pro</span></div>
+    
+    <div class="nav-links">
+      <a href="#" class="nav-item active" onclick="nav('dashboard', this)">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        <span>Overview</span>
+      </a>
+      <a href="#" class="nav-item" onclick="nav('history', this)">
+        <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        <span>Ledger</span>
+      </a>
+      <a href="#" class="nav-item" onclick="nav('tax', this)">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span>Tax & Claims</span>
+      </a>
+      <a href="#" class="nav-item" onclick="nav('settings', this)">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>Settings</span>
+      </a>
+    </div>
+
+    <button class="nav-add-btn" onclick="openModal()">
+      <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>New Entry</span>
+    </button>
+  </nav>
+
+  <main id="app-content">
+    
+    <!-- DASHBOARD VIEW -->
+    <div id="view-dashboard" class="view active">
+      <header class="page-header">
+        <div>
+          <h1 id="greeting">Good Morning</h1>
+          <p class="subtitle" id="current-date">July 2026</p>
+        </div>
+      </header>
+      
+      <div class="metrics-grid">
+        <div class="metric-card"><div class="m-label">Net Cash Flow</div><div class="m-value" id="val-net">₹0</div></div>
+        <div class="metric-card"><div class="m-label">Income</div><div class="m-value txt-income" id="val-income">₹0</div></div>
+        <div class="metric-card"><div class="m-label">Expenses</div><div class="m-value txt-expense" id="val-expense">₹0</div></div>
+        <div class="metric-card"><div class="m-label">Invested</div><div class="m-value txt-invest" id="val-invest">₹0</div></div>
+      </div>
+
+      <div class="dash-layout">
+        <!-- LEFT COL -->
+        <div class="dash-main" style="display:flex; flex-direction:column; gap:24px;">
+          <div class="card">
+            <h2 class="card-title">Expense Breakdown</h2>
+            <div class="chart-container"><canvas id="expenseChart"></canvas></div>
+          </div>
+          
+          <div class="card" id="budget-card">
+            <div class="card-header">
+              <h2 class="card-title">Smart Budgets</h2>
+              <button class="icon-btn" onclick="promptSetBudget()">Set</button>
+            </div>
+            <div id="budget-list" class="txn-list">
+              <p class="text-muted" style="font-size:14px">No budgets set. Click Set to limit spending categories.</p>
+            </div>
+          </div>
+
+          <div class="card" id="loan-card">
+            <div class="card-header">
+              <h2 class="card-title">Active EMIs / Loans</h2>
+              <button class="icon-btn" onclick="promptAddLoan()">Add</button>
+            </div>
+            <div id="loan-list" class="txn-list"></div>
+          </div>
+        </div>
+        
+        <!-- RIGHT COL -->
+        <div class="dash-side" style="display:flex; flex-direction:column; gap:24px;">
+          <div class="card">
+            <h2 class="card-title">Recent Activity</h2>
+            <div id="recent-list" class="txn-list">
+              <div class="loading-state">Loading data...</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Recurring Subs</h2>
+              <div class="badge badge-accent" id="badge-subs">₹0/mo</div>
+            </div>
+            <div id="sub-list" class="txn-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY VIEW -->
+    <div id="view-history" class="view">
+      <header class="page-header">
+        <h1>Ledger</h1>
+        <div class="filters">
+          <select id="hist-month" onchange="loadHistory()"></select>
+          <select id="hist-year" onchange="loadHistory()"></select>
+        </div>
+      </header>
+      <div class="card"><div id="hist-list" class="txn-list"></div></div>
+    </div>
+
+    <!-- TAX VIEW -->
+    <div id="view-tax" class="view">
+      <header class="page-header">
+        <div>
+          <h1>Tax & Claims</h1>
+          <p class="subtitle">Track business reimbursements and tax-deductible expenses.</p>
+        </div>
+        <button class="btn btn-primary" onclick="exportPDF()">Export PDF</button>
+      </header>
+      <div class="dash-layout">
+        <div class="dash-main">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Pending Reimbursements</h2>
+              <div class="badge badge-accent" id="badge-claims">₹0</div>
+            </div>
+            <div id="claims-list" class="txn-list"></div>
+          </div>
+        </div>
+        <div class="dash-side">
+          <div class="card">
+            <h2 class="card-title">Tax Deductible (This Year)</h2>
+            <div id="tax-list" class="txn-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div id="view-settings" class="view">
+      <header class="page-header"><h1>Settings</h1></header>
+      <div class="dash-layout">
+        
+        <div class="card max-w-lg" style="margin-bottom:0">
+          <h2 class="card-title">General Preferences</h2>
+          <div class="toggles-row">
+            <label class="toggle-switch">
+              <input type="checkbox" id="theme-toggle" onchange="toggleTheme()">
+              <span class="slider"></span>
+              <span class="toggle-label">Light Mode</span>
+            </label>
+          </div>
+          <hr style="border:none; border-top:1px solid var(--border); margin:20px 0;">
+          <h2 class="card-title">API Connection</h2>
+          <div class="input-group">
+            <label>Apps Script Web App URL</label>
+            <input type="url" id="inp-url" placeholder="https://script.google.com/...">
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()">Save Configuration</button>
+        </div>
+
+        <div class="card max-w-lg">
+          <h2 class="card-title">Bank CSV Import (Smart Parser)</h2>
+          <p class="text-muted" style="margin-bottom: 16px; font-size:14px;">Upload your bank statement. Spendly will auto-detect Dates, Amounts, and try to auto-categorize based on merchants.</p>
+          <input type="file" id="csv-file" accept=".csv" class="btn" style="margin-bottom:12px; background:var(--surface-hover);">
+          <button class="btn btn-primary" onclick="processCSV()">Parse CSV</button>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- ADD TRANSACTION MODAL -->
+  <div class="modal-overlay" id="add-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>New Entry</h2>
+        <button class="icon-btn close-btn" onclick="closeModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="type-pills">
+          <button class="pill active" id="type-expense" onclick="setTxnType('expense')">Expense</button>
+          <button class="pill" id="type-income" onclick="setTxnType('income')">Income</button>
+          <button class="pill" id="type-investment" onclick="setTxnType('investment')">Investment</button>
+          <button class="pill" id="type-business" onclick="setTxnType('business')">Business</button>
+        </div>
+
+        <div class="input-group">
+          <label>Amount (₹)</label>
+          <div class="amt-input-wrap">
+            <span class="currency">₹</span>
+            <input type="number" id="mod-amt" placeholder="0.00" min="0" step="0.01">
+          </div>
+        </div>
+
+        <div class="input-row">
+          <div class="input-group flex-1">
+            <label>Category</label>
+            <select id="mod-cat"></select>
+          </div>
+          <div class="input-group flex-1">
+            <label>Date</label>
+            <input type="date" id="mod-date">
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Description / Title</label>
+          <input type="text" id="mod-title" placeholder="e.g. Client Lunch, Uber, Salary">
+        </div>
+
+        <div class="input-group" id="mod-entity-wrap">
+          <label id="lbl-entity">Entity / Company</label>
+          <input type="text" id="mod-entity" placeholder="e.g. Acme Corp, John Doe">
+        </div>
+
+        <div class="toggles-row" style="display:flex; flex-wrap:wrap; gap:16px;">
+          <label class="toggle-switch" id="wrap-tax">
+            <input type="checkbox" id="mod-tax">
+            <span class="slider"></span>
+            <span class="toggle-label">Tax Deduct</span>
+          </label>
+          <label class="toggle-switch" id="wrap-rec">
+            <input type="checkbox" id="mod-rec">
+            <span class="slider"></span>
+            <span class="toggle-label">Recurring</span>
+          </label>
+          <label class="toggle-switch" id="wrap-split">
+            <input type="checkbox" id="mod-split" onchange="toggleSplit()">
+            <span class="slider"></span>
+            <span class="toggle-label">Split Bill</span>
+          </label>
+        </div>
+
+        <!-- SPLIT BILL OPTIONS -->
+        <div id="split-box" class="card" style="display:none; margin-top:16px; padding:16px; background:var(--surface-hover);">
+          <h3 style="font-size:14px; margin-bottom:12px;">Who owes you for this?</h3>
+          <div class="input-row">
+            <div class="input-group flex-1" style="margin-bottom:0">
+              <input type="text" id="split-name" placeholder="Friend's Name">
+            </div>
+            <div class="input-group flex-1" style="margin-bottom:0">
+              <input type="number" id="split-amt" placeholder="Owed Amount (₹)">
+            </div>
+          </div>
+          <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">Their portion will be saved to your Pending Claims.</p>
+        </div>
+
+        <button class="btn btn-primary full-w" id="btn-submit" onclick="submitTxn()" style="margin-top: 24px;">
+          Save Transaction
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CSV REVIEW MODAL -->
+  <div class="modal-overlay" id="csv-modal">
+    <div class="modal-content" style="max-width:800px;">
+      <div class="modal-header">
+        <h2>Review Smart Import</h2>
+        <button class="icon-btn close-btn" onclick="document.getElementById('csv-modal').classList.remove('open')">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="csv-body">
+        <!-- Rendered via JS -->
+      </div>
+      <div style="padding:16px; border-top:1px solid var(--border); text-align:right;">
+        <button class="btn btn-primary" onclick="confirmCSVImport()">Import All Valid Rows</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+    }
+  </script>
+</body>
+</html>

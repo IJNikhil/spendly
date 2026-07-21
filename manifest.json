@@ -1,0 +1,21 @@
+{
+  "name": "Spendly Pro",
+  "short_name": "Spendly",
+  "description": "Premium personal finance and expense tracker.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#090b10",
+  "theme_color": "#090b10",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMDkwYjEwIi8+PHBhdGggZD0iTTk2IDMyYTY0IDY0IDAgMSAwIDAgMTI4QTY0IDY0IDAgMSAwIDk2IDMyek04MCA2NGgzMnYxNkg4MHYtMTZ6bTAgMzJoMzJ2MTZIODB2LTE2em0wIDMybDMyLTE2djMySDgweiIgZmlsbD0iIzQzNjFlZSIvPjwvc3ZnPg==",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMDkwYjEwIi8+PHBhdGggZD0iTTI1NiA4NWM5NCAwIDE3MSA3NyAxNzEgMTcxcy03NyAxNzEtMTcxIDE3MVM4NSAzNTAgODUgMjU2IDE2MiA4NSAyNTYgODV6bS00MyA4Nmg4NXY0M2gtODV2LTQzem0wIDg2aDg1djQzaC04NXYtNDN6bTAgODZsODUtNDN2ODZoLTg1eiIgZmlsbD0iIzQzNjFlZSIvPjwvc3ZnPg==",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
