@@ -1,4 +1,6 @@
 // Spendly Pro Phase 3 - Frontend Logic
+const APP_VERSION = 'v2.3-csvfix';
+console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
   type: 'expense',
