@@ -154,21 +154,34 @@
       <div class="dash-layout">
         
         <div class="card max-w-lg" style="margin-bottom:0">
-          <h2 class="card-title">General Preferences</h2>
-          <div class="toggles-row">
+          <h2 class="card-title">API Connection</h2>
+          <div class="input-group">
+            <label>Apps Script Web App URL</label>
+            <input type="url" id="inp-url" placeholder="https://script.google.com/...">
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()">Save & Connect</button>
+          
+          <hr style="border:none; border-top:1px solid var(--border); margin:24px 0;">
+          
+          <h2 class="card-title">Database Setup (New Users)</h2>
+          <p class="text-muted" style="font-size:13px; margin-bottom:16px;">Spendly uses your personal Google Sheet as a free database. To set it up:</p>
+          <ol style="font-size:13px; margin-left:16px; margin-bottom:16px; color:var(--text); line-height:1.6;">
+            <li style="margin-bottom:6px;">Create a blank <a href="https://sheets.new" target="_blank" style="color:var(--accent); text-decoration:none;">Google Sheet</a>.</li>
+            <li style="margin-bottom:6px;">Go to <b>Extensions &gt; Apps Script</b>.</li>
+            <li style="margin-bottom:6px;">Click the button below to copy the server code, paste it, and hit <b>Deploy &gt; New Deployment</b> (Web App, Access: Anyone).</li>
+            <li style="margin-bottom:6px;">Copy the Web App URL it gives you and paste it above!</li>
+          </ol>
+          <button class="btn full-w" onclick="copyBackendCode()" id="btn-copy-code">Copy Apps Script Code</button>
+
+          <hr style="border:none; border-top:1px solid var(--border); margin:24px 0;">
+          <h2 class="card-title">Preferences</h2>
+          <div class="toggles-row" style="margin:0; padding:0; background:transparent; border:none;">
             <label class="toggle-switch">
               <input type="checkbox" id="theme-toggle" onchange="toggleTheme()">
               <span class="slider"></span>
               <span class="toggle-label">Light Mode</span>
             </label>
           </div>
-          <hr style="border:none; border-top:1px solid var(--border); margin:20px 0;">
-          <h2 class="card-title">API Connection</h2>
-          <div class="input-group">
-            <label>Apps Script Web App URL</label>
-            <input type="url" id="inp-url" placeholder="https://script.google.com/...">
-          </div>
-          <button class="btn btn-primary" onclick="saveSettings()">Save Configuration</button>
         </div>
 
         <div class="card max-w-lg">

@@ -646,4 +646,22 @@ function toast(msg, cls) {
   clearTimeout(_tt); _tt = setTimeout(() => el.className = '', 2700);
 }
 
+function copyBackendCode() {
+  let btn = document.getElementById('btn-copy-code');
+  btn.innerText = 'Fetching code...';
+  
+  fetch('AppsScript.js')
+    .then(r => r.text())
+    .then(text => {
+      navigator.clipboard.writeText(text);
+      btn.innerText = 'Copied to Clipboard! ✓';
+      toast('Code copied. Paste into Apps Script!', 'ok');
+      setTimeout(() => { btn.innerText = 'Copy Apps Script Code'; }, 3000);
+    })
+    .catch(e => {
+      toast('Failed to load code.', 'err');
+      btn.innerText = 'Copy Apps Script Code';
+    });
+}
+
 init();
