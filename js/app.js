@@ -1,5 +1,5 @@
 // Spendly Pro Phase 4 - CA Grade Frontend
-const APP_VERSION = 'v2.8.1';
+const APP_VERSION = 'v2.9';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
@@ -205,7 +205,7 @@ function saveSettings() {
 
 // --- DASHBOARD & RENDERING ---
 function renderDashboardData(d) {
-  animateValue('val-net', d.netFlow); animateValue('val-income', d.income);
+  animateValue('val-net', d.availableBalance); animateValue('val-income', d.income);
   animateValue('val-expense', d.expense); animateValue('val-invest', d.investment);
   renderTxnList(d.recent || [], 'recent-list', true);
   renderChart(d.categories || {});

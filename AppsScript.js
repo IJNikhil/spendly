@@ -191,7 +191,10 @@ function doGet(e) {
       var isAll = (monthParam === 'all' || yearParam === 'all');
       var month = parseInt(monthParam), year = parseInt(yearParam);
       var income = 0, expense = 0, investment = 0, businessPending = 0;
+      var availableBalance = 0;
       var recent = [], categoryTotals = {}, subscriptions = [];
+      
+      var filterAbs = isAll ? Infinity : (year * 12 + month);
 
       for (var i = data.length - 1; i >= 1; i--) {
         var r = data[i];
@@ -201,8 +204,16 @@ function doGet(e) {
         var isRec = String(r[13]).toUpperCase() === 'TRUE';
         var rAcc = String(r[17] || 'Default');
 
-        if (rType === 'business' && String(r[9]).toLowerCase() === 'pending') businessPending += rAmt;
         if (accountParam !== 'all' && rAcc !== accountParam) continue;
+        
+        var txnAbs = (rY * 12) + rM;
+        if (txnAbs <= filterAbs) {
+          if (rType === 'income') availableBalance += rAmt;
+          if (rType === 'expense' || rType === 'investment') availableBalance -= rAmt;
+        }
+
+        if (rType === 'business' && String(r[9]).toLowerCase() === 'pending') businessPending += rAmt;
+        
         var inScope = isAll || (rM === month && rY === year);
         if (!inScope) continue;
 

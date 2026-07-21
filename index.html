@@ -84,7 +84,7 @@
       <div id="advance-tax-banner" style="display:none;"></div>
       
       <div class="metrics-grid">
-        <div class="metric-card"><div class="m-label">Net Cash Flow</div><div class="m-value" id="val-net">₹0</div></div>
+        <div class="metric-card"><div class="m-label">Available Balance</div><div class="m-value" id="val-net">₹0</div></div>
         <div class="metric-card"><div class="m-label">Income</div><div class="m-value txt-income" id="val-income">₹0</div></div>
         <div class="metric-card"><div class="m-label">Expenses</div><div class="m-value txt-expense" id="val-expense">₹0</div></div>
         <div class="metric-card"><div class="m-label">Invested</div><div class="m-value txt-invest" id="val-invest">₹0</div></div>
@@ -432,12 +432,12 @@
   </div>
 
   <div id="toast"></div>
-  <script src="js/app.js?v=2.8.1"></script>
+  <script src="js/app.js?v=2.9"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
       if('caches' in window){caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));}
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.8.1'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.9'));
     }
   </script>
 
