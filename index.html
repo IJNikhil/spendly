@@ -256,10 +256,13 @@
           </div>
           <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
           <h2 class="card-title">Manage Bank Accounts</h2>
-          <p class="text-muted" style="font-size:13px;margin-bottom:16px;">Add your bank accounts (e.g. HDFC - 1234) to track them separately.</p>
+          <p class="text-muted" style="font-size:13px;margin-bottom:16px;">Add your bank accounts to track them separately. These sync directly to your spreadsheet database.</p>
           <div class="input-row" style="margin-bottom:16px;">
             <div class="input-group flex-1">
-              <input type="text" id="inp-bank-name" placeholder="Bank & Last 4 Digits">
+              <input type="text" id="inp-bank-name" placeholder="Bank Name (e.g. HDFC)">
+            </div>
+            <div class="input-group flex-1">
+              <input type="number" id="inp-bank-last4" placeholder="Last 4 Digits" max="9999">
             </div>
             <button class="btn btn-primary" onclick="addBankAccount()">Add</button>
           </div>
@@ -429,12 +432,12 @@
   </div>
 
   <div id="toast"></div>
-  <script src="js/app.js?v=2.7.1"></script>
+  <script src="js/app.js?v=2.8"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
       if('caches' in window){caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));}
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.7.1'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.8'));
     }
   </script>
 

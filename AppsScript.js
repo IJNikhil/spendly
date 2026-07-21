@@ -35,6 +35,14 @@ function doPost(e) {
       ls.getRange(1,1,1,6).setFontWeight('bold').setBackground('#9b59b6').setFontColor('#ffffff');
       ls.setFrozenRows(1);
     }
+    var as = ss.getSheetByName('Accounts');
+    if (!as) {
+      as = ss.insertSheet('Accounts');
+      as.appendRow(['AccountName']);
+      as.getRange(1,1,1,1).setFontWeight('bold').setBackground('#2ecc71').setFontColor('#ffffff');
+      as.setFrozenRows(1);
+      as.appendRow(['Default']); // Seed with a default account
+    }
 
     if (action === 'add') {
       var dt = new Date(d.date);
@@ -281,6 +289,34 @@ function doGet(e) {
     }
 
     // ─── P&L REPORT (Month-wise Indian FY) ────────────────────────
+        if (action === 'syncAccounts') {
+      var op = d.op;
+      var accName = d.name;
+      var as = ss.getSheetByName('Accounts');
+      if (!as) return error('Accounts sheet missing.');
+      
+      var data = as.getDataRange().getValues();
+      var foundIdx = -1;
+      for (var i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === accName) { foundIdx = i + 1; break; }
+      }
+      
+      if (op === 'add' && foundIdx === -1) {
+        as.appendRow([accName]);
+      } else if (op === 'delete' && foundIdx !== -1) {
+        as.deleteRow(foundIdx);
+      }
+      
+      // Return updated list
+      data = as.getDataRange().getValues();
+      var accounts = [];
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0]) accounts.push(String(data[i][0]));
+      }
+      if (accounts.length === 0) accounts = ['Default'];
+      return success({accounts: accounts});
+    }
+
     if (action === 'plreport') {
       var fy = parseInt(e.parameter.fy);
       var fyMonths = [
