@@ -1,5 +1,5 @@
 // Spendly Pro Phase 4 - CA Grade Frontend
-const APP_VERSION = 'v2.7';
+const APP_VERSION = 'v2.7.1';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',

@@ -429,17 +429,17 @@
   </div>
 
   <div id="toast"></div>
-  <script src="js/app.js?v=2.6"></script>
+  <script src="js/app.js?v=2.7.1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
       if('caches' in window){caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));}
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.7'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.7.1'));
     }
   </script>
 
   <!-- LOAN MODAL -->
-  <div class="modal" id="loan-modal">
+  <div class="modal-overlay" id="loan-modal">
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="loan-modal-title">Add Loan / EMI</h2>
@@ -473,7 +473,7 @@
   </div>
 
   <!-- BUDGET MODAL -->
-  <div class="modal" id="budget-modal">
+  <div class="modal-overlay" id="budget-modal">
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="budget-modal-title">Set Budget</h2>
