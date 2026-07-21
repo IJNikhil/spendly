@@ -118,7 +118,7 @@
           <div class="card" id="budget-card">
             <div class="card-header">
               <h2 class="card-title">Smart Budgets</h2>
-              <button class="icon-btn" onclick="promptSetBudget()">Set</button>
+              <button class="icon-btn" onclick="openBudgetModal()">Set</button>
             </div>
             <div id="budget-list" class="txn-list">
               <p class="text-muted" style="font-size:14px">No budgets set. Click Set to limit spending categories.</p>
@@ -128,7 +128,7 @@
           <div class="card" id="loan-card">
             <div class="card-header">
               <h2 class="card-title">Active EMIs / Loans</h2>
-              <button class="icon-btn" onclick="promptAddLoan()">Add</button>
+              <button class="icon-btn" onclick="openLoanModal()">Add</button>
             </div>
             <div id="loan-list" class="txn-list"></div>
           </div>
@@ -432,12 +432,12 @@
   </div>
 
   <div id="toast"></div>
-  <script src="js/app.js?v=2.8"></script>
+  <script src="js/app.js?v=2.8.1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
       if('caches' in window){caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));}
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.8'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.8.1'));
     }
   </script>
 
