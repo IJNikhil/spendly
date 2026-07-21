@@ -98,6 +98,14 @@
             <div class="chart-container"><canvas id="expenseChart"></canvas></div>
           </div>
 
+          <div class="card">
+            <h2 class="card-title">6-Month Trend & Runway</h2>
+            <div class="chart-container" style="height:200px;"><canvas id="trendChart"></canvas></div>
+            <div id="runway-estimator" style="margin-top:16px; font-size:13px; color:var(--text-dim); text-align:center; padding:12px; background:var(--surface-hover); border-radius:8px;">
+              Calculating runway...
+            </div>
+          </div>
+
           <!-- 80C/80D Tax Savings Progress (FY) -->
           <div class="card" id="deduction-card">
             <div class="card-header">
@@ -195,8 +203,10 @@
           <h1>P&amp;L Report</h1>
           <p class="subtitle">Month-wise Profit &amp; Loss — Indian Financial Year</p>
         </div>
-        <div class="filters">
-          <select id="pl-fy" onchange="loadPLReport()"></select>
+        <div class="filters" style="display:flex; gap:8px;">
+          <input type="date" id="pl-start" style="padding:6px; border-radius:6px; border:1px solid var(--border);" onchange="loadPLReport()">
+          <span style="align-self:center; color:var(--text-dim);">to</span>
+          <input type="date" id="pl-end" style="padding:6px; border-radius:6px; border:1px solid var(--border);" onchange="loadPLReport()">
         </div>
       </header>
       <div id="pl-content">

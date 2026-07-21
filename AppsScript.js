@@ -358,3 +358,66 @@ function getFY(month, year) {
   // We return the end year of the FY. E.g. Mar 2026 -> 2026. May 2025 -> 2026.
   return month >= 4 ? year + 1 : year;
 }
+
+
+// --- AUTOMATION ---
+function setupTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    ScriptApp.deleteTrigger(triggers[i]);
+  }
+  ScriptApp.newTrigger('sendMonthlyReport')
+    .timeBased()
+    .onMonthDay(1)
+    .atHour(8)
+    .create();
+}
+
+function sendMonthlyReport() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ts = ss.getSheetByName('Transactions');
+  if (!ts) return;
+  var data = ts.getDataRange().getValues();
+  
+  var now = new Date();
+  var targetM = now.getMonth(); // previous month (0-indexed natively, so 0 is Jan)
+  var targetY = now.getFullYear();
+  if (targetM === 0) { targetM = 12; targetY -= 1; }
+  
+  var inc = 0, exp = 0;
+  var cats = {};
+  
+  for (var i = 1; i < data.length; i++) {
+    if (parseInt(data[i][10]) === targetM && parseInt(data[i][11]) === targetY) {
+      var type = String(data[i][3]).toLowerCase();
+      var amt = parseFloat(data[i][4]) || 0;
+      var cat = String(data[i][5]);
+      if (type === 'income') inc += amt;
+      if (type === 'expense') {
+        exp += amt;
+        cats[cat] = (cats[cat] || 0) + amt;
+      }
+    }
+  }
+  
+  var topCats = Object.keys(cats).sort(function(a,b){return cats[b]-cats[a]}).slice(0,3);
+  var catHtml = topCats.map(function(c) { return "<li>" + c + ": ₹" + cats[c] + "</li>"; }).join('');
+  
+  var html = "<div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:20px; border:1px solid #ddd; border-radius:10px;'>";
+  html += "<h2 style='color:#333;'>Spendly Monthly Summary</h2>";
+  html += "<p>Here is your automated financial report for " + targetM + "/" + targetY + "</p>";
+  html += "<h3 style='color:#2ecc71'>Total Income: ₹" + inc + "</h3>";
+  html += "<h3 style='color:#e74c3c'>Total Expense: ₹" + exp + "</h3>";
+  html += "<hr>";
+  html += "<h4>Top Expenses:</h4><ul>" + catHtml + "</ul>";
+  html += "<p style='color:#888;font-size:12px;'>Automated by Spendly Apps Script</p></div>";
+  
+  var email = Session.getEffectiveUser().getEmail();
+  if (email) {
+    MailApp.sendEmail({
+      to: email,
+      subject: "Spendly Report: " + targetM + "/" + targetY,
+      htmlBody: html
+    });
+  }
+}

@@ -2,7 +2,7 @@
   "name": "Spendly Pro",
   "short_name": "Spendly",
   "description": "Premium personal finance and expense tracker.",
-  "start_url": "index.html",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#090b10",
   "theme_color": "#090b10",

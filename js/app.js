@@ -432,8 +432,9 @@ function renderITR(d, regime) {
 // --- P&L REPORT VIEW ---
 function loadPLReport() {
   if(!S.url) return;
-  const fy = document.getElementById('pl-fy').value;
-  const cacheKey = `sp_cache_pl_${fy}`;
+  const sd = document.getElementById('pl-start').value;
+  const ed = document.getElementById('pl-end').value;
+  const cacheKey = `sp_cache_pl_custom_${sd}_${ed}`;
 
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
@@ -442,7 +443,7 @@ function loadPLReport() {
     document.getElementById('pl-content').innerHTML = '<div class="loading-state">Generating P&L Report...</div>';
   }
 
-  fetchWithTimeout(`${S.url}?action=plreport&fy=${fy}`, {})
+  fetchWithTimeout(`${S.url}?action=plreport&startDate=${sd}&endDate=${ed}`, {})
     .then(r => r.json())
     .then(d => {
       if(!d.success) throw new Error(d.error);
@@ -513,36 +514,40 @@ function renderTxnList(txns, containerId, compact = false) {
   let html = '';
   txns.forEach(t => {
     let icon = '', sign = '';
-    if (t.type === 'income') { icon = '↓'; sign = '+'; }
-    if (t.type === 'expense') { icon = '↑'; sign = '-'; }
-    if (t.type === 'investment') { icon = '↗'; sign = '-'; }
+    if (t.type === 'income') { icon = '💰'; sign = '+'; }
+    if (t.type === 'expense') { icon = '🛒'; sign = '-'; }
+    if (t.type === 'investment') { icon = '📈'; sign = '-'; }
     if (t.type === 'business') { icon = '🏢'; sign = ''; } 
     
     let taxTag = t.taxDeductible === 'TRUE' ? '<span class="tax-tag">TAX</span>' : '';
     let recTag = t.recurring === 'TRUE' ? '<span class="tax-tag">🔁</span>' : '';
     let pendingTag = (t.type === 'business' && t.status === 'Pending') ? '<span class="tax-tag" style="background:var(--business-dim);color:var(--business)">PENDING</span>' : '';
     
-    let editSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; stroke:var(--text-dim);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
-    let deleteSvg = `<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-    
-    let actions = `<button class="icon-btn" onclick="editTxn('${t.id}')">${editSvg}</button><button class="icon-btn" onclick="deleteTxn('${t.id}')">${deleteSvg}</button>`;
-    if (t.type === 'business' && t.status === 'Pending') {
-      actions = `<button class="btn-settle" onclick="settleTxn('${t.id}')">CLAIMED</button>` + actions;
+    let controlsInside = '';
+    if (!compact) {
+      controlsInside = `
+        <div class="swipe-actions">
+          <button class="swipe-btn edit" onclick="editTxn('${t.id}')">Edit</button>
+          <button class="swipe-btn delete" onclick="deleteTxn('${t.id}')">Delete</button>
+        </div>
+      `;
     }
 
-    html += `
-      <div class="txn-row">
-        <div class="txn-icon ${t.type}">${icon}</div>
-        <div class="txn-info">
-          <div class="txn-title">${esc(t.title || t.category)}</div>
-          <div class="txn-meta">${t.dateStr} • ${esc(t.entity || t.category)} ${taxTag} ${recTag} ${pendingTag}</div>
+    html += `<div class="txn-swipe-container">
+      ${controlsInside}
+      <div class="txn-item ${compact ? '' : 'swipeable'}" ${!compact ? 'ontouchstart="handleTouchStart(event, this)" ontouchmove="handleTouchMove(event, this)" ontouchend="handleTouchEnd(event, this)"' : ''}>
+        <div class="txn-icon">${icon}</div>
+        <div class="txn-details">
+          <div class="txn-title">${esc(t.title)}</div>
+          <div class="txn-meta">${esc(t.dateStr)} • ${esc(t.category)} ${taxTag}${recTag}${pendingTag}</div>
+          <div class="txn-meta" style="color:var(--text-dim)">${esc(t.bankAccount)} | ${esc(t.paymentMode)}</div>
         </div>
-        <div class="txn-amt-wrap">
-          <div class="txn-amt ${t.type}">${sign}₹${fmt(t.amount)}</div>
+        <div class="txn-amount-wrap" style="text-align:right;">
+          <div class="txn-amount" style="color:${t.type==='expense'||t.type==='investment'?'var(--expense)':'var(--income)'}">${sign}₹${fmt(t.amount)}</div>
+          ${compact ? '' : '<div style="font-size:10px; color:var(--text-dim); margin-top:4px;">&lt; Swipe &gt;</div>'}
         </div>
-        ${!compact ? `<div class="txn-actions">${actions}</div>` : ''}
       </div>
-    `;
+    </div>`;
   });
   el.innerHTML = html;
 }
@@ -1585,4 +1590,142 @@ function deleteBudget() {
   toast('Budget Deleted', 'ok');
   closeBudgetModal();
   loadDashboard();
+}
+
+
+// --- NATIVE SWIPE GESTURES ---
+let touchStartX = 0;
+let currentSwipeEl = null;
+
+function handleTouchStart(e, el) {
+  touchStartX = e.touches[0].clientX;
+  el.style.transition = 'none';
+  if (currentSwipeEl && currentSwipeEl !== el) {
+    currentSwipeEl.style.transform = 'translateX(0)';
+  }
+  currentSwipeEl = el;
+}
+
+function handleTouchMove(e, el) {
+  let touchX = e.touches[0].clientX;
+  let deltaX = touchX - touchStartX;
+  
+  // Resistance when dragging beyond buttons
+  if (deltaX > 80) deltaX = 80 + (deltaX - 80) * 0.2;
+  if (deltaX < -80) deltaX = -80 + (deltaX + 80) * 0.2;
+  
+  el.style.transform = `translateX(${deltaX}px)`;
+}
+
+function handleTouchEnd(e, el) {
+  el.style.transition = 'transform 0.3s ease';
+  let transformStr = el.style.transform;
+  let currentX = parseInt(transformStr.replace('translateX(', '').replace('px)', '')) || 0;
+  
+  if (currentX > 40) {
+    // Swiped Right -> Reveal Edit (Left side)
+    el.style.transform = 'translateX(80px)';
+  } else if (currentX < -40) {
+    // Swiped Left -> Reveal Delete (Right side)
+    el.style.transform = 'translateX(-80px)';
+  } else {
+    // Snap back
+    el.style.transform = 'translateX(0)';
+  }
+}
+
+
+let trendChartInstance = null;
+
+function renderTrendChart(txns, selectedYear, selectedMonth) {
+  if (trendChartInstance) {
+    trendChartInstance.destroy();
+    trendChartInstance = null;
+  }
+
+  // Determine the end date for the 6 months
+  let endY = new Date().getFullYear();
+  let endM = new Date().getMonth() + 1; // 1-12
+  
+  if (selectedYear !== 'all') endY = parseInt(selectedYear);
+  if (selectedMonth !== 'all') endM = parseInt(selectedMonth);
+
+  // Generate last 6 months labels and initialize data
+  let labels = [];
+  let incomeData = [];
+  let expenseData = [];
+  let monthKeys = [];
+  
+  for (let i = 5; i >= 0; i--) {
+    let d = new Date(endY, endM - 1 - i, 1);
+    let m = d.getMonth() + 1;
+    let y = d.getFullYear();
+    labels.push(d.toLocaleString('default', { month: 'short' }) + ' ' + y);
+    monthKeys.push(y + '_' + m);
+    incomeData.push(0);
+    expenseData.push(0);
+  }
+
+  let totalExpenseRunway = 0;
+  
+  // Aggregate data
+  txns.forEach(t => {
+    let key = t.year + '_' + t.month;
+    let idx = monthKeys.indexOf(key);
+    if (idx !== -1) {
+      if (t.type === 'income') incomeData[idx] += t.amount;
+      // Filter out non-recurring outliers for runway?
+      // User said: "calculate burn rate strictly using Expenses minus one-off non-recurring investments or large isolated outliers (if flagged)."
+      // If it's a massive expense and not recurring, we can exclude it from runway, but for chart we show it.
+      if (t.type === 'expense') {
+        expenseData[idx] += t.amount;
+        if (t.amount < 150000 || t.recurring === 'TRUE') {
+          totalExpenseRunway += t.amount;
+        }
+      }
+    }
+  });
+
+  const ctx = document.getElementById('trendChart');
+  if (!ctx) return;
+  
+  trendChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Income', data: incomeData, borderColor: '#2ecc71', backgroundColor: 'rgba(46, 204, 113, 0.1)', fill: true, tension: 0.4 },
+        { label: 'Expense', data: expenseData, borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.1)', fill: true, tension: 0.4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { ticks: { callback: function(value) { return '₹' + (value/1000) + 'k'; } } }
+      }
+    }
+  });
+
+  // Calculate Runway
+  let avgBurn = totalExpenseRunway / 6;
+  
+  // Need to calculate current net worth from ALL transactions (txns passed here are ALL txns because we need 6 months history)
+  let totalSaved = 0;
+  txns.forEach(t => {
+    if (t.type === 'income') totalSaved += t.amount;
+    if (t.type === 'expense' || t.type === 'investment') totalSaved -= t.amount;
+  });
+
+  let runwayText = '';
+  if (avgBurn <= 0) {
+    runwayText = 'Burn rate is zero. Infinite runway!';
+  } else if (totalSaved <= 0) {
+    runwayText = 'Net worth is negative. No runway available.';
+  } else {
+    let months = (totalSaved / avgBurn).toFixed(1);
+    runwayText = `<strong style="color:var(--text);font-size:15px;">${months} Months</strong> of Runway remaining at an avg burn rate of <strong>₹${fmt(avgBurn)}/mo</strong>`;
+  }
+  document.getElementById('runway-estimator').innerHTML = runwayText;
 }

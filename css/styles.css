@@ -388,3 +388,40 @@ body.light-mode #toast { background: rgba(255, 255, 255, 0.9); box-shadow: 0 12p
 .budget-row { margin-bottom: 16px; }
 .budget-header { display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; }
 .budget-meta { font-size: 12px; color: var(--text-muted); margin-top: 6px; text-align:right; font-weight: 500; }
+
+
+/* Swipe Gestures */
+.txn-swipe-container {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+.swipe-actions {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  background: var(--bg);
+}
+.swipe-btn {
+  width: 80px;
+  border: none;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.swipe-btn.edit { background: var(--primary); }
+.swipe-btn.delete { background: var(--expense); }
+.swipeable {
+  background: var(--surface);
+  position: relative;
+  z-index: 2;
+  border-bottom: none !important;
+}
