@@ -1,5 +1,5 @@
 // Spendly Pro Phase 4 - CA Grade Frontend
-const APP_VERSION = 'v2.9.2';
+const APP_VERSION = 'v2.9.3';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
@@ -1193,7 +1193,7 @@ function toast(msg, cls) {
 const BACKEND_CODE = `// Spendly Pro Backend - CA Grade (Phase 4)
 // Columns: ID(1) Date(2) Time(3) Type(4) Amount(5) Category(6) Title(7) Entity(8)
 //          TaxDeductible(9) Status(10) Month(11) Year(12) Week(13) Recurring(14)
-//          TaxSection(15) PaymentMode(16) IncomeHead(17)
+//          TaxSection(15) PaymentMode(16) IncomeHead(17) BankAccount(18)
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -1201,6 +1201,10 @@ function doPost(e) {
 
   try {
     var d = JSON.parse(e.postData.contents);
+
+  var expectedSecret = PropertiesService.getScriptProperties().getProperty('API_SECRET');
+  if (expectedSecret && d.secret !== expectedSecret) return error('Unauthorized');
+
     var action = d.action;
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
@@ -1210,8 +1214,8 @@ function doPost(e) {
       ts = ss.insertSheet('Transactions');
       ts.appendRow(['ID','Date','Time','Type','Amount','Category','Title','Entity',
                     'TaxDeductible','Status','Month','Year','Week','Recurring',
-                    'TaxSection','PaymentMode','IncomeHead']);
-      ts.getRange(1,1,1,17).setFontWeight('bold').setBackground('#0a0d14').setFontColor('#ffffff');
+                    'TaxSection','PaymentMode','IncomeHead','BankAccount']);
+      ts.getRange(1,1,1,18).setFontWeight('bold').setBackground('#0a0d14').setFontColor('#ffffff');
       ts.setFrozenRows(1);
     }
 
@@ -1222,6 +1226,14 @@ function doPost(e) {
       ls.appendRow(['ID','Name','Principal','MonthlyEMI','TotalMonths','PaidMonths']);
       ls.getRange(1,1,1,6).setFontWeight('bold').setBackground('#9b59b6').setFontColor('#ffffff');
       ls.setFrozenRows(1);
+    }
+    var as = ss.getSheetByName('Accounts');
+    if (!as) {
+      as = ss.insertSheet('Accounts');
+      as.appendRow(['AccountName']);
+      as.getRange(1,1,1,1).setFontWeight('bold').setBackground('#2ecc71').setFontColor('#ffffff');
+      as.setFrozenRows(1);
+      as.appendRow(['Default']); // Seed with a default account
     }
 
     if (action === 'add') {
@@ -1234,7 +1246,7 @@ function doPost(e) {
       var row = findRowById(ts, d.id);
       if (row > 0) {
         var dt = new Date(d.date);
-        ts.getRange(row, 1, 1, 17).setValues([buildRow(d, dt)]);
+        ts.getRange(row, 1, 1, 18).setValues([buildRow(d, dt)]);
         return success({msg: 'Transaction Updated'});
       }
       return error('Transaction not found');
@@ -1248,7 +1260,7 @@ function doPost(e) {
         rows.push(buildRow(txn, dt));
       }
       if (rows.length > 0) {
-        ts.getRange(ts.getLastRow() + 1, 1, rows.length, 17).setValues(rows);
+        ts.getRange(ts.getLastRow() + 1, 1, rows.length, 18).setValues(rows);
       }
       return success({msg: rows.length + ' Transactions Added'});
     }
@@ -1275,9 +1287,51 @@ function doPost(e) {
       if (row > 0) {
         var paid = parseInt(ls.getRange(row, 6).getValue()) || 0;
         ls.getRange(row, 6).setValue(paid + 1);
-        return success({msg: 'Payment Recorded'});
+        
+        // Auto-generate EMI Expense Transaction
+        var dt = new Date();
+        if (d.dateOverride) dt = new Date(d.dateOverride);
+        
+        var txnRow = [
+          'tx_emi_' + Date.now().toString(36), // ID
+          dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}), // DateStr
+          dt.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'}), // TimeStr
+          'expense', // Type
+          parseFloat(d.emi), // Amount
+          'EMI / Loan Payment', // Category
+          'EMI: ' + String(d.name), // Title
+          'Bank', // Entity
+          'FALSE', // TaxDeductible
+          '', // Status
+          dt.getMonth() + 1, // Month
+          dt.getFullYear(), // Year
+          weekNum(dt), // Week
+          'TRUE', // Recurring
+          'None', // TaxSection
+          'Auto Debit', // PaymentMode
+          '', // IncomeHead
+          d.bankAccount || 'Default' // BankAccount
+        ];
+        ts.appendRow(txnRow);
+        
+        return success({msg: 'Payment Recorded & Transaction Added'});
       }
       return error('Loan not found');
+    }
+
+    if (action === 'editLoan') {
+      var row = findRowById(ls, d.id);
+      if (row > 0) {
+        ls.getRange(row, 2, 1, 4).setValues([[d.name, parseFloat(d.principal), parseFloat(d.emi), parseInt(d.totalMonths)]]);
+        return success({msg: 'Loan Updated'});
+      }
+      return error('Loan not found');
+    }
+
+    if (action === 'deleteLoan') {
+      var row = findRowById(ls, d.id);
+      if (row > 0) { ls.deleteRow(row); return success({msg: 'Loan Deleted'}); }
+      return error('Not found');
     }
 
     return error('Invalid action');
@@ -1294,7 +1348,7 @@ function buildRow(d, dt) {
     d.category || '', d.title || '', d.entity || '',
     d.taxDeductible ? 'TRUE' : 'FALSE', d.status || '',
     dt.getMonth()+1, dt.getFullYear(), weekNum(dt), d.recurring ? 'TRUE' : 'FALSE',
-    d.taxSection || 'None', d.paymentMode || 'UPI', d.incomeHead || ''
+    d.taxSection || 'None', d.paymentMode || 'UPI', d.incomeHead || '', d.bankAccount || 'Default'
   ];
 }
 
@@ -1310,6 +1364,10 @@ function findRowById(sheet, id) {
 
 function doGet(e) {
   try {
+
+  var expectedSecret = PropertiesService.getScriptProperties().getProperty('API_SECRET');
+  if (expectedSecret && e.parameter.secret !== expectedSecret) return error('Unauthorized');
+
     var action = e.parameter.action || '';
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var ts = ss.getSheetByName('Transactions');
@@ -1321,10 +1379,14 @@ function doGet(e) {
     if (action === 'dashboard') {
       var monthParam = e.parameter.month;
       var yearParam  = e.parameter.year;
+      var accountParam = e.parameter.account || 'all';
       var isAll = (monthParam === 'all' || yearParam === 'all');
       var month = parseInt(monthParam), year = parseInt(yearParam);
       var income = 0, expense = 0, investment = 0, businessPending = 0;
+      var availableBalance = 0;
       var recent = [], categoryTotals = {}, subscriptions = [];
+      
+      var filterAbs = isAll ? Infinity : (year * 12 + month);
 
       for (var i = data.length - 1; i >= 1; i--) {
         var r = data[i];
@@ -1332,8 +1394,18 @@ function doGet(e) {
         var rAmt  = parseFloat(r[4]) || 0;
         var rM = parseInt(r[10]), rY = parseInt(r[11]);
         var isRec = String(r[13]).toUpperCase() === 'TRUE';
+        var rAcc = String(r[17] || 'Default');
+
+        if (accountParam !== 'all' && rAcc !== accountParam) continue;
+        
+        var txnAbs = (rY * 12) + rM;
+        if (txnAbs <= filterAbs) {
+          if (rType === 'income') availableBalance += rAmt;
+          if (rType === 'expense' || rType === 'investment') availableBalance -= rAmt;
+        }
 
         if (rType === 'business' && String(r[9]).toLowerCase() === 'pending') businessPending += rAmt;
+        
         var inScope = isAll || (rM === month && rY === year);
         if (!inScope) continue;
 
@@ -1350,16 +1422,27 @@ function doGet(e) {
                     emi:loanData[i][3],totalMonths:loanData[i][4],paidMonths:loanData[i][5]});
       }
       return success({income:income, expense:expense, investment:investment,
-                      businessPending:businessPending, netFlow:income-expense,
+                      businessPending:businessPending, availableBalance:availableBalance,
                       categories:categoryTotals, recent:recent, subscriptions:subscriptions, loans:loans});
     }
 
     // ─── HISTORY ──────────────────────────────────────────────────
     if (action === 'history') {
-      var month = parseInt(e.parameter.month), year = parseInt(e.parameter.year);
+      var monthParam = e.parameter.month;
+      var yearParam  = e.parameter.year;
+      var accountParam = e.parameter.account || 'all';
+      var isAll = (monthParam === 'all' || yearParam === 'all');
+      var month = parseInt(monthParam), year = parseInt(yearParam);
       var results = [];
       for (var i = data.length - 1; i >= 1; i--) {
-        if (parseInt(data[i][10]) === month && parseInt(data[i][11]) === year) results.push(rowToObj(data[i]));
+        var rAcc = String(data[i][17] || 'Default');
+        if (accountParam !== 'all' && rAcc !== accountParam) continue;
+        
+        if (isAll) {
+          results.push(rowToObj(data[i]));
+        } else if (parseInt(data[i][10]) === month && parseInt(data[i][11]) === year) {
+          results.push(rowToObj(data[i]));
+        }
       }
       return success({transactions: results});
     }
@@ -1374,12 +1457,12 @@ function doGet(e) {
       for (var i = 1; i < data.length; i++) {
         var r = data[i];
         var rY = parseInt(r[11]), rM = parseInt(r[10]);
-        var inFY = (rY === fy-1 && rM >= 4) || (rY === fy && rM <= 3);
+        var inFY = (getFY(rM, rY) === fy);
         if (!inFY) continue;
 
         var rType    = String(r[3]).toLowerCase();
         var rAmt     = parseFloat(r[4]) || 0;
-        var rSection = String(r[14] || '').toLowerCase().replace(/\\s/g,'');
+        var rSection = String(r[14] || '').toLowerCase().replace(/\s/g,'');
         var rHead    = String(r[16] || '').toLowerCase();
 
         if (rType === 'income') {
@@ -1409,6 +1492,34 @@ function doGet(e) {
     }
 
     // ─── P&L REPORT (Month-wise Indian FY) ────────────────────────
+        if (action === 'syncAccounts') {
+      var op = d.op;
+      var accName = d.name;
+      var as = ss.getSheetByName('Accounts');
+      if (!as) return error('Accounts sheet missing.');
+      
+      var data = as.getDataRange().getValues();
+      var foundIdx = -1;
+      for (var i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === accName) { foundIdx = i + 1; break; }
+      }
+      
+      if (op === 'add' && foundIdx === -1) {
+        as.appendRow([accName]);
+      } else if (op === 'delete' && foundIdx !== -1) {
+        as.deleteRow(foundIdx);
+      }
+      
+      // Return updated list
+      data = as.getDataRange().getValues();
+      var accounts = [];
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0]) accounts.push(String(data[i][0]));
+      }
+      if (accounts.length === 0) accounts = ['Default'];
+      return success({accounts: accounts});
+    }
+
     if (action === 'plreport') {
       var fy = parseInt(e.parameter.fy);
       var fyMonths = [
@@ -1471,13 +1582,84 @@ function rowToObj(row) {
   return {
     id:row[0], dateStr:row[1], timeStr:row[2], type:row[3], amount:row[4],
     category:row[5], title:row[6], entity:row[7], taxDeductible:row[8], status:row[9],
-    recurring:row[13], taxSection:row[14]||'', paymentMode:row[15]||'', incomeHead:row[16]||''
+    recurring:row[13], taxSection:row[14]||'', paymentMode:row[15]||'', incomeHead:row[16]||'',
+    bankAccount:row[17]||'Default'
   };
 }
 
 function success(data) { data.success = true; return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
 function error(msg) { return ContentService.createTextOutput(JSON.stringify({success:false,error:msg})).setMimeType(ContentService.MimeType.JSON); }
 function weekNum(d) { var j = new Date(d.getFullYear(),0,1); return Math.ceil((((d-j)/86400000)+j.getDay()+1)/7); }
+
+
+function getFY(month, year) {
+  // month is 1-12. If Apr-Dec (>=4), FY is year to year+1. If Jan-Mar (<=3), FY is year-1 to year.
+  // We return the end year of the FY. E.g. Mar 2026 -> 2026. May 2025 -> 2026.
+  return month >= 4 ? year + 1 : year;
+}
+
+
+// --- AUTOMATION ---
+function setupTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    ScriptApp.deleteTrigger(triggers[i]);
+  }
+  ScriptApp.newTrigger('sendMonthlyReport')
+    .timeBased()
+    .onMonthDay(1)
+    .atHour(8)
+    .create();
+}
+
+function sendMonthlyReport() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ts = ss.getSheetByName('Transactions');
+  if (!ts) return;
+  var data = ts.getDataRange().getValues();
+  
+  var now = new Date();
+  var targetM = now.getMonth(); // previous month (0-indexed natively, so 0 is Jan)
+  var targetY = now.getFullYear();
+  if (targetM === 0) { targetM = 12; targetY -= 1; }
+  
+  var inc = 0, exp = 0;
+  var cats = {};
+  
+  for (var i = 1; i < data.length; i++) {
+    if (parseInt(data[i][10]) === targetM && parseInt(data[i][11]) === targetY) {
+      var type = String(data[i][3]).toLowerCase();
+      var amt = parseFloat(data[i][4]) || 0;
+      var cat = String(data[i][5]);
+      if (type === 'income') inc += amt;
+      if (type === 'expense') {
+        exp += amt;
+        cats[cat] = (cats[cat] || 0) + amt;
+      }
+    }
+  }
+  
+  var topCats = Object.keys(cats).sort(function(a,b){return cats[b]-cats[a]}).slice(0,3);
+  var catHtml = topCats.map(function(c) { return "<li>" + c + ": ₹" + cats[c] + "</li>"; }).join('');
+  
+  var html = "<div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:20px; border:1px solid #ddd; border-radius:10px;'>";
+  html += "<h2 style='color:#333;'>Spendly Monthly Summary</h2>";
+  html += "<p>Here is your automated financial report for " + targetM + "/" + targetY + "</p>";
+  html += "<h3 style='color:#2ecc71'>Total Income: ₹" + inc + "</h3>";
+  html += "<h3 style='color:#e74c3c'>Total Expense: ₹" + exp + "</h3>";
+  html += "<hr>";
+  html += "<h4>Top Expenses:</h4><ul>" + catHtml + "</ul>";
+  html += "<p style='color:#888;font-size:12px;'>Automated by Spendly Apps Script</p></div>";
+  
+  var email = Session.getEffectiveUser().getEmail();
+  if (email) {
+    MailApp.sendEmail({
+      to: email,
+      subject: "Spendly Report: " + targetM + "/" + targetY,
+      htmlBody: html
+    });
+  }
+}
 `;
 
 function copyBackendCode() {
