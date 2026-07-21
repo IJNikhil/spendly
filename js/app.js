@@ -224,13 +224,7 @@ function renderDashboardData(d) {
   }
 }
 
-function clearDashCache() {
-  const m = document.getElementById('dash-month').value;
-  const y = document.getElementById('dash-year').value;
-  const acc = document.getElementById('dash-account') ? document.getElementById('dash-account').value : 'all';
-  const acc = document.getElementById('dash-account') ? document.getElementById('dash-account').value : 'all';
-  localStorage.removeItem(`sp_cache_dash_${acc}_${m}_${y}`);
-}
+function clearDashCache() { invalidateCaches(); }
 
 function loadDashboard() {
   if(!S.url) return;
@@ -238,8 +232,8 @@ function loadDashboard() {
   const m = document.getElementById('dash-month').value;
   const y = document.getElementById('dash-year').value;
   const isAllTime = (m === 'all' || y === 'all');
+  const acc = document.getElementById('dash-account') ? document.getElementById('dash-account').value : 'all';
   const cacheKey = `sp_cache_dash_${acc}_${m}_${y}`;
-
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const label = isAllTime ? 'All Time Overview' : `${months[parseInt(m)-1]} ${y}`;
   const sub = document.getElementById('current-date');

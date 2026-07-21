@@ -221,15 +221,17 @@
         
         <div class="card" style="margin-bottom:24px;">
           <h2 class="card-title">Backend Connection</h2>
-          <div class="input-group">
-            <label>Google Apps Script URL</label>
-            <input type="text" id="inp-url" placeholder="https://script.google.com/macros/s/.../exec">
-          </div>
-          <div class="input-group">
-            <label>API Secret Passcode (Optional)</label>
-            <input type="password" id="inp-secret" placeholder="Your API_SECRET property">
-          </div>
-          <button class="btn btn-primary" onclick="saveSettings()">Save Connection</button>
+          <form onsubmit="event.preventDefault(); saveSettings();">
+            <div class="input-group">
+              <label>Google Apps Script URL</label>
+              <input type="text" id="inp-url" placeholder="https://script.google.com/macros/s/.../exec">
+            </div>
+            <div class="input-group">
+              <label>API Secret Passcode (Optional)</label>
+              <input type="password" id="inp-secret" placeholder="Your API_SECRET property">
+            </div>
+            <button type="submit" class="btn btn-primary">Save Connection</button>
+          </form>
         </div>  
           <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
           
