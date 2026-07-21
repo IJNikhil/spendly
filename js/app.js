@@ -50,7 +50,8 @@ function init() {
   const dMSel = document.getElementById('dash-month');
   const dYSel = document.getElementById('dash-year');
   dMSel.appendChild(new Option('All Time', 'all'));
-  months.forEach((m, i) => { dMSel.appendChild(new Option(m, i+1, false, i === now.getMonth())); });
+  months.forEach((m, i) => { dMSel.appendChild(new Option(m, i+1, false, false)); });
+  dMSel.value = 'all';
   dYSel.appendChild(new Option('All Years', 'all'));
   for(let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) dYSel.appendChild(new Option(y, y, false, y === now.getFullYear()));
 
@@ -561,9 +562,9 @@ function renderBudgets(expenseCatData) {
     if(pct > 90) colorClass = 'progress-danger';
     
     html += `
-      <div class="budget-row">
+      <div class="budget-row" onclick="openBudgetModal('${esc(cat)}')" style="cursor:pointer">
         <div class="budget-header">
-          <span>${esc(cat)}</span>
+          <span>${esc(cat)} ✏️</span>
           <span>₹${fmt(spent)} / ₹${fmt(limit)}</span>
         </div>
         <div class="progress-bar-bg">
@@ -583,22 +584,76 @@ function renderSubscriptions(subs) {
   renderTxnList(subs, 'sub-list', true);
 }
 
-function promptAddLoan() {
+function openLoanModal(editId = null) {
+  document.getElementById('loan-modal').classList.add('open');
+  document.getElementById('loan-name').value = '';
+  document.getElementById('loan-prin').value = '';
+  document.getElementById('loan-emi').value = '';
+  document.getElementById('loan-months').value = '';
+  document.getElementById('btn-save-loan').removeAttribute('data-edit-id');
+  document.getElementById('loan-modal-title').innerText = 'Add Loan / EMI';
+  
+  if (editId && typeof editId === 'string') {
+    let cached = JSON.parse(localStorage.getItem('sp_cache_dash_all_all_all') || '{}');
+    if (!cached.loans) {
+      for(let i=0; i<localStorage.length; i++) {
+        let key = localStorage.key(i);
+        if(key.startsWith('sp_cache_dash_')) {
+          let d = JSON.parse(localStorage.getItem(key) || '{}');
+          if(d.loans && d.loans.find(l => l.id === editId)) { cached = d; break; }
+        }
+      }
+    }
+    let loan = (cached.loans || []).find(l => l.id === editId);
+    if (loan) {
+      document.getElementById('loan-name').value = loan.name;
+      document.getElementById('loan-prin').value = loan.principal;
+      document.getElementById('loan-emi').value = loan.emi;
+      document.getElementById('loan-months').value = loan.totalMonths;
+      document.getElementById('btn-save-loan').setAttribute('data-edit-id', editId);
+      document.getElementById('loan-modal-title').innerText = 'Edit Loan';
+    }
+  }
+}
+function closeLoanModal() { document.getElementById('loan-modal').classList.remove('open'); }
+
+function saveLoan() {
   if(!S.url) { toast('Connect API first', 'err'); return; }
-  let name = prompt('Loan Name (e.g. Home Loan):');
-  let prin = prompt('Total Principal Amount (₹):');
-  let emi = prompt('Monthly EMI (₹):');
-  let months = prompt('Total Duration (Months):');
+  let name = document.getElementById('loan-name').value.trim();
+  let prin = document.getElementById('loan-prin').value;
+  let emi = document.getElementById('loan-emi').value;
+  let months = document.getElementById('loan-months').value;
   
-  if(!name || !prin || !emi || !months) return;
+  if(!name || !prin || !emi || !months) { toast('Fill all details', 'err'); return; }
   
-  fetchWithTimeout(S.url, { method: 'POST', body: JSON.stringify({
-    action: 'addLoan', id: 'ln_' + Date.now().toString(36),
+  let editId = document.getElementById('btn-save-loan').getAttribute('data-edit-id');
+  let payload = {
+    action: editId ? 'editLoan' : 'addLoan',
+    id: editId || 'ln_' + Date.now().toString(36),
     name: name, principal: prin, emi: emi, totalMonths: months
-  })}).then(r => r.json()).then(d => {
-    toast('Loan Added', 'ok');
-    loadDashboard();
-  }).catch(() => toast('Failed to add loan', 'err'));
+  };
+  
+  let btn = document.getElementById('btn-save-loan');
+  btn.innerText = 'Saving...'; btn.disabled = true;
+  
+  fetchWithTimeout(S.url, { method: 'POST', body: JSON.stringify(payload) })
+    .then(r => r.json()).then(d => {
+      toast(editId ? 'Loan Updated' : 'Loan Added', 'ok');
+      clearDashCache();
+      loadDashboard();
+      closeLoanModal();
+    }).catch(() => toast('Failed to save loan', 'err'))
+    .finally(() => { btn.innerText = 'Save Loan'; btn.disabled = false; });
+}
+
+function deleteLoan(id) {
+  if(!confirm('Delete this loan?')) return;
+  fetchWithTimeout(S.url, { method: 'POST', body: JSON.stringify({action: 'deleteLoan', id: id}) })
+    .then(r => r.json()).then(d => {
+      toast('Loan Deleted', 'ok');
+      clearDashCache();
+      loadDashboard();
+    }).catch(() => toast('Delete failed', 'err'));
 }
 
 function payLoan(id, emiAmt, name) {
@@ -799,17 +854,15 @@ function editTxn(id) {
   let txn = null;
   const m = document.getElementById('hist-month').value || (new Date().getMonth() + 1);
   const y = document.getElementById('hist-year').value || new Date().getFullYear();
-  let caches = [
-    `sp_cache_hist_${m}_${y}`, `sp_cache_dash_${m}_${y}`, 
-    `sp_cache_dash_all_all`, `sp_cache_itr_${y}`, `sp_cache_pl_${y}`
-  ];
-  
-  for(let key of caches) {
-    let d = JSON.parse(localStorage.getItem(key) || 'null');
-    if (d) {
-       let list = d.transactions || d.recent || (Array.isArray(d) ? d : []);
-       txn = list.find(t => t.id === id);
-       if (txn) break;
+  for(let i=0; i<localStorage.length; i++) {
+    let key = localStorage.key(i);
+    if(key.startsWith('sp_cache_')) {
+      let d = JSON.parse(localStorage.getItem(key) || 'null');
+      if (d) {
+         let list = d.transactions || d.recent || (Array.isArray(d) ? d : []);
+         txn = list.find(t => t.id === id);
+         if (txn) break;
+      }
     }
   }
   
@@ -1451,4 +1504,38 @@ function renderBankAccounts() {
   updateSelect('mod-account', false);
   updateSelect('dash-account', true);
   updateSelect('hist-account', true);
+}
+
+function openBudgetModal(cat = null) {
+  document.getElementById('budget-modal').classList.add('open');
+  if (cat && typeof cat === 'string') {
+    document.getElementById('budget-cat').value = cat;
+    document.getElementById('budget-limit').value = S.budgets[cat] || '';
+    document.getElementById('btn-delete-budget').style.display = 'inline-block';
+  } else {
+    document.getElementById('budget-limit').value = '';
+    document.getElementById('btn-delete-budget').style.display = 'none';
+  }
+}
+function closeBudgetModal() { document.getElementById('budget-modal').classList.remove('open'); }
+
+function saveBudget() {
+  let cat = document.getElementById('budget-cat').value;
+  let limit = parseFloat(document.getElementById('budget-limit').value);
+  if(isNaN(limit) || limit <= 0) { toast('Enter valid limit', 'err'); return; }
+  
+  S.budgets[cat] = limit;
+  localStorage.setItem('sp_budgets', JSON.stringify(S.budgets));
+  toast('Budget Saved', 'ok');
+  closeBudgetModal();
+  loadDashboard();
+}
+
+function deleteBudget() {
+  let cat = document.getElementById('budget-cat').value;
+  delete S.budgets[cat];
+  localStorage.setItem('sp_budgets', JSON.stringify(S.budgets));
+  toast('Budget Deleted', 'ok');
+  closeBudgetModal();
+  loadDashboard();
 }

@@ -88,6 +88,21 @@ function doPost(e) {
       return error('Loan not found');
     }
 
+    if (action === 'editLoan') {
+      var row = findRowById(ls, d.id);
+      if (row > 0) {
+        ls.getRange(row, 2, 1, 4).setValues([[d.name, parseFloat(d.principal), parseFloat(d.emi), parseInt(d.totalMonths)]]);
+        return success({msg: 'Loan Updated'});
+      }
+      return error('Loan not found');
+    }
+
+    if (action === 'deleteLoan') {
+      var row = findRowById(ls, d.id);
+      if (row > 0) { ls.deleteRow(row); return success({msg: 'Loan Deleted'}); }
+      return error('Not found');
+    }
+
     return error('Invalid action');
   } catch(err) {
     return error(err.toString());
