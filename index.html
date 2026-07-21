@@ -434,7 +434,7 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
       if('caches' in window){caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));}
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.6'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.7'));
     }
   </script>
 
