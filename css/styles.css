@@ -132,6 +132,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
 }
 .logo { display: none; }
+.nav-links { display: contents; }
 .nav-item {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   color: var(--text-muted); font-size: 10px; font-weight: 500; text-decoration: none;
@@ -139,6 +140,13 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
 }
 .nav-item.active { color: var(--accent); }
 .nav-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+/* Sort items on mobile so Add Button is in the middle */
+.nav-links .nav-item:nth-child(1) { order: 1; }
+.nav-links .nav-item:nth-child(2) { order: 2; }
+.nav-add-btn { order: 3; }
+.nav-links .nav-item:nth-child(3) { order: 4; }
+.nav-links .nav-item:nth-child(4) { order: 5; }
 
 .nav-add-btn {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -157,11 +165,17 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   #app-content { padding: 40px 40px 40px 280px; }
   
   .nav-bar {
-    top: 0; left: 0; width: 240px; height: 100vh; border-top: none; border-right: 1px solid var(--border);
-    flex-direction: column; justify-content: flex-start; align-items: stretch;
-    padding: 32px 20px;
+    width: 260px; height: 100vh; position: fixed; top: 0; left: 0;
+    border-top: none; border-right: 1px solid var(--border);
+    flex-direction: column; align-items: stretch; justify-content: flex-start;
+    padding: 32px 20px; box-shadow: none;
   }
   .logo { display: block; font-size: 20px; font-weight: 700; margin-bottom: 40px; padding-left: 12px; letter-spacing: -0.03em; }
+  
+  .nav-links { display: flex; flex-direction: column; gap: 4px; }
+  /* Reset mobile order */
+  .nav-links .nav-item:nth-child(1), .nav-links .nav-item:nth-child(2), .nav-add-btn, .nav-links .nav-item:nth-child(3), .nav-links .nav-item:nth-child(4) { order: unset; }
+
   .nav-item { flex-direction: row; padding: 10px 12px; font-size: 14px; border-radius: var(--r-sm); }
   .nav-item:hover { background: var(--surface-hover); color: var(--text); }
   .nav-item.active { background: var(--surface-hover); color: var(--text); font-weight: 500; }
@@ -172,6 +186,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
     margin: 16px 0; padding: 10px; border-radius: var(--r-sm);
     background: var(--accent); color: white; border: none;
     cursor: pointer; transition: background 0.2s;
+    margin-top: auto; /* Pushes the button to the bottom of the sidebar */
   }
   .nav-add-btn:hover { background: var(--accent-hover); }
   .nav-add-icon { width: auto; height: auto; border-radius: 0; background: transparent; box-shadow: none; margin: 0; display: flex; }
