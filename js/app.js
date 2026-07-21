@@ -642,8 +642,13 @@ function animateValue(id, end) { const obj = document.getElementById(id); if(obj
 let _tt;
 function toast(msg, cls) {
   let el = document.getElementById('toast');
-  el.innerText = msg; el.className = 'show ' + cls;
-  clearTimeout(_tt); _tt = setTimeout(() => el.className = '', 2700);
+  let icon = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+  if (cls === 'ok') icon = '<svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
+  if (cls === 'err') icon = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+  
+  el.innerHTML = `<div class="toast-icon">${icon}</div><span class="toast-msg">${esc(msg)}</span>`;
+  el.className = 'show ' + (cls || '');
+  clearTimeout(_tt); _tt = setTimeout(() => el.className = '', 3000);
 }
 
 const BACKEND_CODE = `// Spendly Pro Backend - Apps Script (Phase 3)
