@@ -537,79 +537,121 @@ function processCSV() {
     const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
     if(lines.length < 2) { toast('CSV is empty or invalid', 'err'); return; }
     
-    // Heuristic sniffing for standard columns
-    let dtIdx = -1, amtIdx = -1, descIdx = -1;
-    let headers = lines[0].split(',').map(h => h.toLowerCase().trim());
+    // Sniff Delimiter (comma, tab, semicolon)
+    let sample = lines.slice(0, 10).join('\n');
+    let delim = ',';
+    if((sample.match(/\t/g) || []).length > (sample.match(/,/g) || []).length) delim = '\t';
+    else if((sample.match(/;/g) || []).length > (sample.match(/,/g) || []).length) delim = ';';
+
+    // Find Header Line in top 15 lines
+    let headerLineIdx = -1;
+    let dtIdx = -1, descIdx = -1, amtIdx = -1, debitIdx = -1, creditIdx = -1;
     
-    // Attempt header match first
-    headers.forEach((h, i) => {
-      if(h.includes('date')) dtIdx = i;
-      if(h.includes('amount') || h.includes('withdrawal') || h.includes('debit')) amtIdx = i;
-      if(h.includes('description') || h.includes('particulars') || h.includes('narration')) descIdx = i;
-    });
+    for(let i = 0; i < Math.min(lines.length, 15); i++) {
+      let cols = lines[i].split(delim).map(h => h.toLowerCase().replace(/["']/g, '').trim());
+      
+      let dIdx = cols.findIndex(h => h.includes('date'));
+      let descI = cols.findIndex(h => h.includes('detail') || h.includes('description') || h.includes('particular') || h.includes('narration') || h.includes('remark') || h.includes('transaction') || h.includes('info') || h.includes('summary') || h.includes('memo'));
+      let debI = cols.findIndex(h => h === 'debit' || h.includes('withdrawal') || h.includes('dr'));
+      let credI = cols.findIndex(h => h === 'credit' || h.includes('deposit') || h.includes('cr'));
+      let aIdx = cols.findIndex(h => h.includes('amount') || h.includes('txn amount'));
+      
+      if (dIdx !== -1 && (descI !== -1 || debI !== -1 || aIdx !== -1)) {
+        headerLineIdx = i;
+        dtIdx = dIdx;
+        descIdx = descI !== -1 ? descI : 1; // fallback
+        debitIdx = debI;
+        creditIdx = credI;
+        amtIdx = aIdx;
+        break;
+      }
+    }
     
-    // Fallback heuristic on first data row if headers are weird
-    if(dtIdx===-1 || amtIdx===-1 || descIdx===-1) {
-      let cols = lines[1].split(',');
+    // Fallback detection if headers failed
+    if (headerLineIdx === -1) {
+      headerLineIdx = 0;
+      let cols = lines[1] ? lines[1].split(delim) : [];
       cols.forEach((c, i) => {
-        if(c.match(/\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/) && dtIdx===-1) dtIdx = i;
-        if(c.match(/^-?\d+(\.\d+)?$/) && amtIdx===-1) amtIdx = i;
-        if(c.length > 10 && !c.match(/^\d+$/) && descIdx===-1) descIdx = i;
+        if(c.match(/\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/) && dtIdx === -1) dtIdx = i;
+        if(c.match(/^-?\d+(\.\d+)?$/) && amtIdx === -1) amtIdx = i;
+        if(c.length > 8 && !c.match(/^\d+$/) && descIdx === -1) descIdx = i;
       });
     }
 
-    if(dtIdx===-1 || amtIdx===-1 || descIdx===-1) {
-      toast('Could not auto-detect columns. Ensure CSV has Date, Amount, Description.', 'err'); return;
+    if(dtIdx === -1 || (amtIdx === -1 && debitIdx === -1 && creditIdx === -1)) {
+      toast('Could not auto-detect columns. Ensure CSV has Date, Amount/Debit, Details.', 'err'); return;
     }
 
     S.csvParsedRows = [];
     let html = `<div class="csv-table-wrapper"><table class="csv-table">
-      <thead><tr><th>Date</th><th>Description</th><th>Detected Category</th><th>Amount</th></tr></thead><tbody>`;
+      <thead><tr><th>Date</th><th>Details</th><th>Type</th><th>Category</th><th>Amount</th></tr></thead><tbody>`;
     
-    for(let i=1; i<Math.min(lines.length, 100); i++) { // Limit 100 per import batch for safety
-      let cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim()); // simple unquote
-      if(cols.length <= Math.max(dtIdx, amtIdx, descIdx)) continue;
+    for(let i = headerLineIdx + 1; i < lines.length; i++) {
+      let cols = lines[i].split(delim).map(c => c.replace(/^"|"$/g, '').trim());
+      if(cols.length <= dtIdx) continue;
       
       let rawDate = cols[dtIdx];
-      let rawAmt = cols[amtIdx].replace(/,/g,'');
-      let rawDesc = cols[descIdx];
+      let rawDesc = descIdx !== -1 && cols[descIdx] ? cols[descIdx] : 'Bank Transaction';
       
+      let type = 'expense';
+      let displayAmt = 0;
+      
+      let debitVal = debitIdx !== -1 && cols[debitIdx] ? parseFloat(cols[debitIdx].replace(/,/g, '')) : NaN;
+      let creditVal = creditIdx !== -1 && cols[creditIdx] ? parseFloat(cols[creditIdx].replace(/,/g, '')) : NaN;
+      let amtVal = amtIdx !== -1 && cols[amtIdx] ? parseFloat(cols[amtIdx].replace(/,/g, '')) : NaN;
+
+      if (!isNaN(debitVal) && debitVal > 0) {
+        type = 'expense';
+        displayAmt = debitVal;
+      } else if (!isNaN(creditVal) && creditVal > 0) {
+        type = 'income';
+        displayAmt = creditVal;
+      } else if (!isNaN(amtVal) && amtVal !== 0) {
+        type = amtVal < 0 ? 'income' : 'expense';
+        displayAmt = Math.abs(amtVal);
+      } else {
+        continue; // Skip non-financial lines or balance rows
+      }
+
       // Smart Auto-Categorization
       let lowerDesc = rawDesc.toLowerCase();
-      let cat = 'Other Expense';
-      if(lowerDesc.includes('uber') || lowerDesc.includes('ola') || lowerDesc.includes('irctc')) cat = 'Transport';
-      else if(lowerDesc.includes('swiggy') || lowerDesc.includes('zomato') || lowerDesc.includes('restaurant')) cat = 'Dining Out';
-      else if(lowerDesc.includes('netflix') || lowerDesc.includes('amazon') || lowerDesc.includes('prime')) cat = 'Subscriptions';
-      else if(lowerDesc.includes('hospital') || lowerDesc.includes('pharmacy')) cat = 'Healthcare';
-      
-      let amount = parseFloat(rawAmt);
-      if(isNaN(amount)) continue;
-      
-      let type = amount >= 0 ? 'expense' : 'income'; // Assuming positive amounts in banks are often withdrawals (expenses). If negative, it's credit. (Depends on bank, but standard fallback)
-      let displayAmt = Math.abs(amount);
-      
+      let cat = type === 'income' ? 'Salary' : 'Other Expense';
+      if(lowerDesc.includes('uber') || lowerDesc.includes('ola') || lowerDesc.includes('irctc') || lowerDesc.includes('fuel') || lowerDesc.includes('petrol')) cat = 'Transport';
+      else if(lowerDesc.includes('swiggy') || lowerDesc.includes('zomato') || lowerDesc.includes('restaurant') || lowerDesc.includes('cafe')) cat = 'Dining Out';
+      else if(lowerDesc.includes('netflix') || lowerDesc.includes('prime') || lowerDesc.includes('spotify') || lowerDesc.includes('apple')) cat = 'Subscriptions';
+      else if(lowerDesc.includes('hospital') || lowerDesc.includes('pharmacy') || lowerDesc.includes('apollo') || lowerDesc.includes('medical')) cat = 'Healthcare';
+      else if(lowerDesc.includes('amazon') || lowerDesc.includes('flipkart') || lowerDesc.includes('myntra')) cat = 'Shopping';
+      else if(lowerDesc.includes('salary') || lowerDesc.includes('payroll')) cat = 'Salary';
+
       let dt = new Date(rawDate);
-      if(isNaN(dt)) dt = new Date(); // fallback
+      if(isNaN(dt)) dt = new Date();
       
       S.csvParsedRows.push({
         id: 'tx_csv_' + Date.now().toString(36) + i,
         type: type, amount: displayAmt, category: cat,
-        title: rawDesc.substring(0,40), entity: 'Bank Import', taxDeductible: false, status: '', recurring: false,
+        title: rawDesc.substring(0,45), entity: 'Bank Import', taxDeductible: false, status: '', recurring: false,
         date: dt.toISOString(),
         dateStr: dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}),
         timeStr: '12:00 PM'
       });
       
+      let catOptions = (S.categories[type] || S.categories.expense);
+      
       html += `<tr>
-        <td>${dt.toLocaleDateString()}</td>
-        <td>${esc(rawDesc.substring(0,30))}</td>
+        <td>${dt.toLocaleDateString('en-IN', {day:'numeric',month:'short'})}</td>
+        <td>${esc(rawDesc.substring(0,35))}</td>
+        <td><span class="badge ${type==='income'?'badge-accent':'badge-accent'}" style="${type==='income'?'color:var(--income);background:var(--income-dim)':'color:var(--expense);background:var(--expense-dim)'}">${type.toUpperCase()}</span></td>
         <td><select class="csv-cat-select" onchange="S.csvParsedRows[${S.csvParsedRows.length-1}].category=this.value">
-            ${S.categories.expense.map(c => `<option value="${c}" ${c===cat?'selected':''}>${c}</option>`).join('')}
+            ${catOptions.map(c => `<option value="${c}" ${c===cat?'selected':''}>${c}</option>`).join('')}
         </select></td>
-        <td class="${type==='income'?'csv-valid':'csv-invalid'}">₹${fmt(displayAmt)}</td>
+        <td class="${type==='income'?'csv-valid':'csv-invalid'}" style="${type==='income'?'color:var(--income);text-decoration:none':'color:var(--text);text-decoration:none'}">₹${fmt(displayAmt)}</td>
       </tr>`;
     }
     
+    if (S.csvParsedRows.length === 0) {
+      toast('No valid transaction rows found in CSV', 'err'); return;
+    }
+
     html += '</tbody></table></div>';
     document.getElementById('csv-body').innerHTML = html;
     document.getElementById('csv-modal').classList.add('open');
