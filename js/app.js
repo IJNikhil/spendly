@@ -724,9 +724,15 @@ function processCSV() {
       let type = 'expense';
       let displayAmt = 0;
       
-      let debitVal = debitIdx !== -1 && cols[debitIdx] ? parseFloat(cols[debitIdx].replace(/,/g, '')) : NaN;
-      let creditVal = creditIdx !== -1 && cols[creditIdx] ? parseFloat(cols[creditIdx].replace(/,/g, '')) : NaN;
-      let amtVal = amtIdx !== -1 && cols[amtIdx] ? parseFloat(cols[amtIdx].replace(/,/g, '')) : NaN;
+      let cleanAmt = (val) => {
+        if (!val) return NaN;
+        let parsed = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+        return isNaN(parsed) ? NaN : parsed;
+      };
+
+      let debitVal = debitIdx !== -1 ? cleanAmt(cols[debitIdx]) : NaN;
+      let creditVal = creditIdx !== -1 ? cleanAmt(cols[creditIdx]) : NaN;
+      let amtVal = amtIdx !== -1 ? cleanAmt(cols[amtIdx]) : NaN;
 
       if (!isNaN(debitVal) && debitVal > 0) {
         type = 'expense';
@@ -738,7 +744,7 @@ function processCSV() {
         type = amtVal < 0 ? 'income' : 'expense';
         displayAmt = Math.abs(amtVal);
       } else {
-        continue; // Skip non-financial lines or balance rows
+        continue; 
       }
 
       // Smart Auto-Categorization
@@ -787,7 +793,10 @@ function processCSV() {
     }
     
     if (S.csvParsedRows.length === 0) {
-      toast('No valid transaction rows found in CSV', 'err'); return;
+      toast('No valid transaction rows found in CSV. Check column headers (Date, Debit, Credit)', 'err'); 
+      console.log("CSV Debug - Headers detected:", {dtIdx, debitIdx, creditIdx, amtIdx});
+      console.log("CSV Debug - First 3 Data Rows:", lines.slice(headerLineIdx + 1, headerLineIdx + 4).map(l => parseCsvLine(l, delim)));
+      return;
     }
 
     html += '</tbody></table></div>';
