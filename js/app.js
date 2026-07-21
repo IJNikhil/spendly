@@ -14,9 +14,17 @@ const S = {
   }
 };
 
-const fetchWithTimeout = (url, options, timeout = 10000) => {
+const fetchWithTimeout = (url, options = {}, timeout = 15000) => {
+  const opts = {
+    redirect: 'follow',
+    ...options,
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+      ...(options.headers || {})
+    }
+  };
   return Promise.race([
-    fetch(url, options),
+    fetch(url, opts),
     new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
   ]);
 };
