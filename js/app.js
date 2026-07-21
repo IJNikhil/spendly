@@ -1,5 +1,5 @@
 // Spendly Pro Phase 4 - CA Grade Frontend
-const APP_VERSION = 'v2.9.4';
+const APP_VERSION = 'v2.9.5';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
@@ -212,6 +212,10 @@ function renderDashboardData(d) {
   renderBudgets(d.categories || {});
   renderSubscriptions(d.subscriptions || []);
   renderLoans(d.loans || []);
+  
+  const m = document.getElementById('dash-month').value;
+  const y = document.getElementById('dash-year').value;
+  renderTrendChart(d.sixMonthTxns || [], y, m, d.availableBalance || 0);
   
   if (d.businessPending > 0) {
     document.getElementById('advance-tax-banner').style.display = 'flex';
@@ -426,8 +430,17 @@ function renderITR(d, regime) {
 // --- P&L REPORT VIEW ---
 function loadPLReport() {
   if(!S.url) return;
-  const sd = document.getElementById('pl-start').value;
-  const ed = document.getElementById('pl-end').value;
+  let sd = document.getElementById('pl-start').value;
+  let ed = document.getElementById('pl-end').value;
+  if (!sd || !ed) {
+    const now = new Date();
+    let y = now.getFullYear();
+    let fy = (now.getMonth() + 1 <= 3) ? y : y + 1;
+    sd = (fy - 1) + "-04-01";
+    ed = fy + "-03-31";
+    document.getElementById('pl-start').value = sd;
+    document.getElementById('pl-end').value = ed;
+  }
   const cacheKey = `sp_cache_pl_custom_${sd}_${ed}`;
 
   const cached = localStorage.getItem(cacheKey);
@@ -715,13 +728,16 @@ function deleteLoan(id) {
 function payLoan(id, emiAmt, name) {
   if(!confirm(`Record payment of ₹${emiAmt} for ${name}?`)) return;
   
+  let acc = document.getElementById('dash-account') ? document.getElementById('dash-account').value : 'all';
+  if (acc === 'all') acc = 'Default';
+
   fetchWithTimeout(S.url, { method: 'POST', body: JSON.stringify({action: 'payLoan', id: id}) })
     .then(r => r.json()).then(d => {
       let dt = new Date();
       let payload = {
         action: 'add', id: 'tx_' + Date.now().toString(36), type: 'expense',
-        amount: emiAmt, category: 'Rent/Mortgage', title: `EMI: ${name}`,
-        entity: 'Bank', taxDeductible: false, status: '', recurring: true,
+        amount: emiAmt, category: 'EMI / Loan Payment', title: `EMI: ${name}`,
+        entity: acc, taxDeductible: false, status: '', recurring: true,
         taxSection: '24b', paymentMode: 'Auto-Debit', incomeHead: '',
         date: dt.toISOString(),
         dateStr: dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}),
@@ -1387,6 +1403,9 @@ function doGet(e) {
       var recent = [], categoryTotals = {}, subscriptions = [];
       
       var filterAbs = isAll ? Infinity : (year * 12 + month);
+      var nowFor6m = new Date();
+      var currentAbs = isAll ? (nowFor6m.getFullYear() * 12 + nowFor6m.getMonth() + 1) : (year * 12 + month);
+      var sixMonthTxns = [];
 
       for (var i = data.length - 1; i >= 1; i--) {
         var r = data[i];
@@ -1406,6 +1425,10 @@ function doGet(e) {
 
         if (rType === 'business' && String(r[9]).toLowerCase() === 'pending') businessPending += rAmt;
         
+        if (txnAbs <= currentAbs && txnAbs > currentAbs - 6) {
+          sixMonthTxns.push(rowToObj(r));
+        }
+        
         var inScope = isAll || (rM === month && rY === year);
         if (!inScope) continue;
 
@@ -1423,7 +1446,7 @@ function doGet(e) {
       }
       return success({income:income, expense:expense, investment:investment,
                       businessPending:businessPending, availableBalance:availableBalance,
-                      categories:categoryTotals, recent:recent, subscriptions:subscriptions, loans:loans});
+                      categories:categoryTotals, recent:recent, subscriptions:subscriptions, loans:loans, sixMonthTxns:sixMonthTxns});
     }
 
     // ─── HISTORY ──────────────────────────────────────────────────
@@ -1521,30 +1544,50 @@ function doGet(e) {
     }
 
     if (action === 'plreport') {
-      var fy = parseInt(e.parameter.fy);
-      var fyMonths = [
-        {m:4,y:fy-1},{m:5,y:fy-1},{m:6,y:fy-1},{m:7,y:fy-1},
-        {m:8,y:fy-1},{m:9,y:fy-1},{m:10,y:fy-1},{m:11,y:fy-1},{m:12,y:fy-1},
-        {m:1,y:fy},{m:2,y:fy},{m:3,y:fy}
-      ];
-      var report = fyMonths.map(function(mo) {
-        return {month:mo.m, year:mo.y, income:0, expense:0, investment:0};
-      });
+      var sdStr = e.parameter.startDate;
+      var edStr = e.parameter.endDate;
+      var report = [];
+      
+      // If dates not provided, default to current FY
+      if (!sdStr || !edStr) {
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = now.getMonth() + 1;
+        var fy = m <= 3 ? y : y + 1;
+        sdStr = (fy - 1) + "-04-01";
+        edStr = fy + "-03-31";
+      }
+
+      var sdParts = sdStr.split('-');
+      var edParts = edStr.split('-');
+      var startY = parseInt(sdParts[0]), startM = parseInt(sdParts[1]);
+      var endY = parseInt(edParts[0]), endM = parseInt(edParts[1]);
+      
+      var curY = startY, curM = startM;
+      while (curY * 12 + curM <= endY * 12 + endM) {
+        report.push({month: curM, year: curY, income: 0, expense: 0, investment: 0});
+        curM++;
+        if (curM > 12) { curM = 1; curY++; }
+      }
 
       for (var i = 1; i < data.length; i++) {
         var rM = parseInt(data[i][10]), rY = parseInt(data[i][11]);
         var rType = String(data[i][3]).toLowerCase();
         var rAmt  = parseFloat(data[i][4]) || 0;
-        for (var j = 0; j < report.length; j++) {
-          if (report[j].month === rM && report[j].year === rY) {
-            if (rType === 'income')     report[j].income     += rAmt;
-            if (rType === 'expense')    report[j].expense    += rAmt;
-            if (rType === 'investment') report[j].investment += rAmt;
-            break;
+        
+        // Quick check if transaction is within bounds before looping report array
+        if ((rY * 12 + rM) >= (startY * 12 + startM) && (rY * 12 + rM) <= (endY * 12 + endM)) {
+          for (var j = 0; j < report.length; j++) {
+            if (report[j].month === rM && report[j].year === rY) {
+              if (rType === 'income')     report[j].income     += rAmt;
+              if (rType === 'expense')    report[j].expense    += rAmt;
+              if (rType === 'investment') report[j].investment += rAmt;
+              break;
+            }
           }
         }
       }
-      return success({fy:fy, report:report});
+      return success({report:report});
     }
 
     // ─── NET WORTH ─────────────────────────────────────────────────
@@ -1825,7 +1868,7 @@ function handleTouchEnd(e, el) {
 
 let trendChartInstance = null;
 
-function renderTrendChart(txns, selectedYear, selectedMonth) {
+function renderTrendChart(txns, selectedYear, selectedMonth, currentNetWorth = 0) {
   if (trendChartInstance) {
     trendChartInstance.destroy();
     trendChartInstance = null;
@@ -1899,13 +1942,7 @@ function renderTrendChart(txns, selectedYear, selectedMonth) {
   // Calculate Runway
   let avgBurn = totalExpenseRunway / 6;
   
-  // Need to calculate current net worth from ALL transactions (txns passed here are ALL txns because we need 6 months history)
-  let totalSaved = 0;
-  txns.forEach(t => {
-    if (t.type === 'income') totalSaved += t.amount;
-    if (t.type === 'expense' || t.type === 'investment') totalSaved -= t.amount;
-  });
-
+  let totalSaved = currentNetWorth;
   let runwayText = '';
   if (avgBurn <= 0) {
     runwayText = 'Burn rate is zero. Infinite runway!';

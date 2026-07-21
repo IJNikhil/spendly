@@ -195,6 +195,9 @@ function doGet(e) {
       var recent = [], categoryTotals = {}, subscriptions = [];
       
       var filterAbs = isAll ? Infinity : (year * 12 + month);
+      var nowFor6m = new Date();
+      var currentAbs = isAll ? (nowFor6m.getFullYear() * 12 + nowFor6m.getMonth() + 1) : (year * 12 + month);
+      var sixMonthTxns = [];
 
       for (var i = data.length - 1; i >= 1; i--) {
         var r = data[i];
@@ -214,6 +217,10 @@ function doGet(e) {
 
         if (rType === 'business' && String(r[9]).toLowerCase() === 'pending') businessPending += rAmt;
         
+        if (txnAbs <= currentAbs && txnAbs > currentAbs - 6) {
+          sixMonthTxns.push(rowToObj(r));
+        }
+        
         var inScope = isAll || (rM === month && rY === year);
         if (!inScope) continue;
 
@@ -231,7 +238,7 @@ function doGet(e) {
       }
       return success({income:income, expense:expense, investment:investment,
                       businessPending:businessPending, availableBalance:availableBalance,
-                      categories:categoryTotals, recent:recent, subscriptions:subscriptions, loans:loans});
+                      categories:categoryTotals, recent:recent, subscriptions:subscriptions, loans:loans, sixMonthTxns:sixMonthTxns});
     }
 
     // ─── HISTORY ──────────────────────────────────────────────────
@@ -329,30 +336,50 @@ function doGet(e) {
     }
 
     if (action === 'plreport') {
-      var fy = parseInt(e.parameter.fy);
-      var fyMonths = [
-        {m:4,y:fy-1},{m:5,y:fy-1},{m:6,y:fy-1},{m:7,y:fy-1},
-        {m:8,y:fy-1},{m:9,y:fy-1},{m:10,y:fy-1},{m:11,y:fy-1},{m:12,y:fy-1},
-        {m:1,y:fy},{m:2,y:fy},{m:3,y:fy}
-      ];
-      var report = fyMonths.map(function(mo) {
-        return {month:mo.m, year:mo.y, income:0, expense:0, investment:0};
-      });
+      var sdStr = e.parameter.startDate;
+      var edStr = e.parameter.endDate;
+      var report = [];
+      
+      // If dates not provided, default to current FY
+      if (!sdStr || !edStr) {
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = now.getMonth() + 1;
+        var fy = m <= 3 ? y : y + 1;
+        sdStr = (fy - 1) + "-04-01";
+        edStr = fy + "-03-31";
+      }
+
+      var sdParts = sdStr.split('-');
+      var edParts = edStr.split('-');
+      var startY = parseInt(sdParts[0]), startM = parseInt(sdParts[1]);
+      var endY = parseInt(edParts[0]), endM = parseInt(edParts[1]);
+      
+      var curY = startY, curM = startM;
+      while (curY * 12 + curM <= endY * 12 + endM) {
+        report.push({month: curM, year: curY, income: 0, expense: 0, investment: 0});
+        curM++;
+        if (curM > 12) { curM = 1; curY++; }
+      }
 
       for (var i = 1; i < data.length; i++) {
         var rM = parseInt(data[i][10]), rY = parseInt(data[i][11]);
         var rType = String(data[i][3]).toLowerCase();
         var rAmt  = parseFloat(data[i][4]) || 0;
-        for (var j = 0; j < report.length; j++) {
-          if (report[j].month === rM && report[j].year === rY) {
-            if (rType === 'income')     report[j].income     += rAmt;
-            if (rType === 'expense')    report[j].expense    += rAmt;
-            if (rType === 'investment') report[j].investment += rAmt;
-            break;
+        
+        // Quick check if transaction is within bounds before looping report array
+        if ((rY * 12 + rM) >= (startY * 12 + startM) && (rY * 12 + rM) <= (endY * 12 + endM)) {
+          for (var j = 0; j < report.length; j++) {
+            if (report[j].month === rM && report[j].year === rY) {
+              if (rType === 'income')     report[j].income     += rAmt;
+              if (rType === 'expense')    report[j].expense    += rAmt;
+              if (rType === 'investment') report[j].investment += rAmt;
+              break;
+            }
           }
         }
       }
-      return success({fy:fy, report:report});
+      return success({report:report});
     }
 
     // ─── NET WORTH ─────────────────────────────────────────────────
