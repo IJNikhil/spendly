@@ -79,7 +79,11 @@ function nav(viewId, el) {
   if (viewId === 'tax') loadTax();
 }
 
-function openModal() { document.getElementById('add-modal').classList.add('open'); document.getElementById('mod-amt').focus(); }
+function openModal() { 
+  document.getElementById('add-modal').classList.add('open'); 
+  document.getElementById('mod-amt').focus(); 
+  document.getElementById('btn-submit').removeAttribute('data-edit-id');
+}
 function closeModal() { document.getElementById('add-modal').classList.remove('open'); }
 function toggleTheme() {
   const isLight = document.getElementById('theme-toggle').checked;
@@ -260,7 +264,10 @@ function renderTxnList(txns, containerId, compact = false) {
     let recTag = t.recurring === 'TRUE' ? '<span class="tax-tag">🔁</span>' : '';
     let pendingTag = (t.type === 'business' && t.status === 'Pending') ? '<span class="tax-tag" style="background:var(--business-dim);color:var(--business)">PENDING</span>' : '';
     
-    let actions = `<button class="icon-btn" onclick="deleteTxn('${t.id}')"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`;
+    let editSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; stroke:var(--text-dim);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    let deleteSvg = `<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+    
+    let actions = `<button class="icon-btn" onclick="editTxn('${t.id}')">${editSvg}</button><button class="icon-btn" onclick="deleteTxn('${t.id}')">${deleteSvg}</button>`;
     if (t.type === 'business' && t.status === 'Pending') {
       actions = `<button class="btn-settle" onclick="settleTxn('${t.id}')">CLAIMED</button>` + actions;
     }
@@ -448,6 +455,42 @@ function submitTxn() {
   let dateStr = dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
   let timeStr = new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'});
 
+  let editId = document.getElementById('btn-submit').getAttribute('data-edit-id');
+  if (editId && !isSplit) {
+    let payload = {
+      action: 'edit', id: editId, type: S.type,
+      amount: amt, category: document.getElementById('mod-cat').value,
+      title: document.getElementById('mod-title').value, entity: document.getElementById('mod-entity').value,
+      taxDeductible: (S.type === 'expense' && isTax),
+      status: (S.type === 'business') ? 'Pending' : '',
+      recurring: isRec,
+      date: dt.toISOString(), dateStr: dateStr, timeStr: timeStr
+    };
+    
+    let btn = document.getElementById('btn-submit');
+    btn.innerText = 'Saving...'; btn.disabled = true;
+    
+    fetchWithTimeout(S.url, { method: 'POST', body: JSON.stringify(payload) })
+      .then(r => r.json()).then(d => {
+        if(!d.success) throw new Error(d.error);
+        toast('Updated Successfully', 'ok');
+        document.getElementById('btn-submit').removeAttribute('data-edit-id');
+        document.getElementById('mod-amt').value = '';
+        document.getElementById('mod-title').value = '';
+        document.getElementById('mod-entity').value = '';
+        closeModal();
+        if(document.getElementById('view-dashboard').classList.contains('active')) { clearCache(); loadDashboard(); }
+        if(document.getElementById('view-history').classList.contains('active')) { clearCache(); loadHistory(); }
+        if(document.getElementById('view-tax').classList.contains('active')) { clearCache(); loadTax(); }
+      }).catch(e => {
+        toast('Error: ' + (e.message === 'timeout' ? 'Network timeout' : 'Failed to update'), 'err');
+      }).finally(() => {
+        btn.innerText = 'Save Transaction'; btn.disabled = false;
+      });
+      
+    return;
+  }
+
   let txns = [];
 
   if (isSplit && S.type === 'expense') {
@@ -524,6 +567,38 @@ function deleteTxn(id) {
       if(document.getElementById('view-history').classList.contains('active')) loadHistory();
       if(document.getElementById('view-tax').classList.contains('active')) loadTax();
     }).catch(e => toast('Delete failed', 'err'));
+}
+
+function editTxn(id) {
+  let txn = null;
+  const m = document.getElementById('hist-month').value || (new Date().getMonth() + 1);
+  const y = document.getElementById('hist-year').value || new Date().getFullYear();
+  let caches = [`sp_cache_hist_${m}_${y}`, `sp_cache_dash_${m}_${y}`, `sp_cache_tax_${y}`];
+  
+  for(let key of caches) {
+    let d = JSON.parse(localStorage.getItem(key) || 'null');
+    if (d) {
+       let list = d.transactions || d.recent || d.claims || d.tax || (Array.isArray(d) ? d : []);
+       txn = list.find(t => t.id === id);
+       if (txn) break;
+    }
+  }
+  
+  if (!txn) { toast('Transaction data not found', 'err'); return; }
+  
+  setTxnType(txn.type);
+  document.getElementById('mod-amt').value = txn.amount;
+  document.getElementById('mod-date').valueAsDate = new Date(txn.date);
+  document.getElementById('mod-cat').value = txn.category;
+  document.getElementById('mod-title').value = txn.title;
+  document.getElementById('mod-entity').value = txn.entity;
+  document.getElementById('mod-tax').checked = (txn.taxDeductible === 'TRUE');
+  document.getElementById('mod-rec').checked = (txn.recurring === 'TRUE');
+  
+  document.getElementById('btn-submit').setAttribute('data-edit-id', txn.id);
+  
+  document.getElementById('add-modal').classList.add('open'); 
+  document.getElementById('mod-amt').focus();
 }
 
 function settleTxn(id) {
@@ -677,6 +752,15 @@ function processCSV() {
       else if(lowerDesc.includes('salary') || lowerDesc.includes('payroll')) cat = 'Salary';
 
       let dt = new Date(rawDate);
+      if(isNaN(dt)) {
+        let parts = rawDate.split(/[-/]/);
+        if (parts.length >= 3) {
+          let p0 = parseInt(parts[0]), p1 = parseInt(parts[1]), p2 = parseInt(parts[2].split(' ')[0]);
+          if (p2 < 100) p2 += 2000;
+          if (p0 > 12) dt = new Date(p2, p1 - 1, p0);
+          else dt = new Date(p2, p1 - 1, p0); // Assume DD/MM/YYYY default for ambiguous
+        }
+      }
       if(isNaN(dt)) dt = new Date();
       
       S.csvParsedRows.push({

@@ -41,6 +41,21 @@ function doPost(e) {
       ]);
       return success({msg: 'Transaction Added'});
     } 
+
+    if (action === 'edit') {
+      var row = findRowById(ts, d.id);
+      if (row > 0) {
+        var dt = new Date(d.date);
+        var rowData = [
+          d.id, d.dateStr, d.timeStr, d.type, parseFloat(d.amount), 
+          d.category || '', d.title || '', d.entity || '', d.taxDeductible ? 'TRUE' : 'FALSE', d.status || '', 
+          dt.getMonth()+1, dt.getFullYear(), weekNum(dt), d.recurring ? 'TRUE' : 'FALSE'
+        ];
+        ts.getRange(row, 1, 1, rowData.length).setValues([rowData]);
+        return success({msg: 'Transaction Updated'});
+      }
+      return error('Transaction not found');
+    }
     
     if (action === 'addBulk') {
       // Used for CSV Imports or Split Bills
