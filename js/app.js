@@ -752,13 +752,14 @@ function processCSV() {
       else if(lowerDesc.includes('salary') || lowerDesc.includes('payroll')) cat = 'Salary';
 
       let dt = new Date(rawDate);
-      if(isNaN(dt)) {
+      // Force custom parsing for DD/MM/YYYY since native JS treats 01/05/2026 as Jan 5
+      if(rawDate.includes('/') || rawDate.includes('-')) {
         let parts = rawDate.split(/[-/]/);
         if (parts.length >= 3) {
           let p0 = parseInt(parts[0]), p1 = parseInt(parts[1]), p2 = parseInt(parts[2].split(' ')[0]);
           if (p2 < 100) p2 += 2000;
-          if (p0 > 12) dt = new Date(p2, p1 - 1, p0);
-          else dt = new Date(p2, p1 - 1, p0); // Assume DD/MM/YYYY default for ambiguous
+          // Assume DD/MM/YYYY format always for Indian context
+          dt = new Date(p2, p1 - 1, p0);
         }
       }
       if(isNaN(dt)) dt = new Date();
