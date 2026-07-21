@@ -1,5 +1,5 @@
 // Spendly Pro Phase 3 - Frontend Logic
-const APP_VERSION = 'v2.3-csvfix';
+const APP_VERSION = 'v2.4-multiline';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
@@ -643,6 +643,29 @@ function exportPDF() {
 }
 
 // --- CSV SMART IMPORT ---
+// Full RFC-4180 compliant CSV parser — handles embedded newlines/commas in quoted fields
+function parseFullCSV(text, delim) {
+  let rows = [], row = [], cur = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    let c = text[i], nx = text[i + 1];
+    if (c === '"') {
+      if (inQ && nx === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (!inQ && c === (delim || ',')) {
+      row.push(cur.trim()); cur = '';
+    } else if (!inQ && (c === '\n' || c === '\r')) {
+      if (c === '\r' && nx === '\n') i++;
+      row.push(cur.trim()); cur = '';
+      if (row.some(x => x !== '')) rows.push(row);
+      row = [];
+    } else {
+      cur += c;
+    }
+  }
+  if (cur || row.length) { row.push(cur.trim()); if (row.some(x => x !== '')) rows.push(row); }
+  return rows;
+}
+
 function parseCsvLine(str, delim) {
   if (delim !== ',') return str.split(delim).map(c => c.replace(/^"|"$/g, '').trim());
   let result = []; let cur = ''; let inQuote = false;
@@ -664,146 +687,126 @@ function processCSV() {
   
   reader.onload = function(e) {
     const text = e.target.result;
-    const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
-    if(lines.length < 2) { toast('CSV is empty or invalid', 'err'); return; }
-    
-    // Sniff Delimiter (comma, tab, semicolon)
-    let sample = lines.slice(0, 10).join('\n');
-    let delim = ',';
-    if((sample.match(/\t/g) || []).length > (sample.match(/,/g) || []).length) delim = '\t';
-    else if((sample.match(/;/g) || []).length > (sample.match(/,/g) || []).length) delim = ';';
 
-    // Find Header Line in top 15 lines
-    let headerLineIdx = -1;
+    // Sniff delimiter from first 500 chars
+    let head = text.substring(0, 500);
+    let delim = ',';
+    if ((head.match(/\t/g) || []).length > (head.match(/,/g) || []).length) delim = '\t';
+    else if ((head.match(/;/g) || []).length > (head.match(/,/g) || []).length) delim = ';';
+
+    // Parse FULL file respecting quoted multi-line fields
+    let allRows = parseFullCSV(text, delim);
+    if (allRows.length < 2) { toast('CSV is empty or invalid', 'err'); return; }
+
+    // Find header row in first 15 rows
+    let headerRowIdx = -1;
     let dtIdx = -1, descIdx = -1, amtIdx = -1, debitIdx = -1, creditIdx = -1;
-    
-    for(let i = 0; i < Math.min(lines.length, 15); i++) {
-      let cols = parseCsvLine(lines[i], delim).map(h => h.toLowerCase());
-      
-      let dIdx = cols.findIndex(h => h.includes('date'));
-      let descI = cols.findIndex(h => h.includes('detail') || h.includes('description') || h.includes('particular') || h.includes('narration') || h.includes('remark') || h.includes('transaction') || h.includes('info') || h.includes('summary') || h.includes('memo'));
-      let debI = cols.findIndex(h => h === 'debit' || h.includes('withdrawal') || h.includes('dr'));
-      let credI = cols.findIndex(h => h === 'credit' || h.includes('deposit') || h.includes('cr'));
-      let aIdx = cols.findIndex(h => h.includes('amount') || h.includes('txn amount'));
-      
-      if (dIdx !== -1 && (descI !== -1 || debI !== -1 || aIdx !== -1)) {
-        headerLineIdx = i;
-        dtIdx = dIdx;
-        descIdx = descI !== -1 ? descI : 1; // fallback
-        debitIdx = debI;
-        creditIdx = credI;
-        amtIdx = aIdx;
+
+    for (let i = 0; i < Math.min(allRows.length, 15); i++) {
+      let cols = allRows[i].map(h => h.toLowerCase().trim());
+      let dIdx  = cols.findIndex(h => h.includes('date'));
+      let descI = cols.findIndex(h => h.includes('detail') || h.includes('description') || h.includes('particular') || h.includes('narration') || h.includes('remark') || h.includes('memo'));
+      let debI  = cols.findIndex(h => h === 'debit' || h.includes('withdrawal') || h.includes('dr'));
+      let credI = cols.findIndex(h => h === 'credit' || h.includes('deposit') || (h === 'cr'));
+      let aIdx  = cols.findIndex(h => h === 'amount' || h === 'txn amount');
+
+      if (dIdx !== -1 && (descI !== -1 || debI !== -1 || credI !== -1 || aIdx !== -1)) {
+        headerRowIdx = i; dtIdx = dIdx; descIdx = descI; debitIdx = debI; creditIdx = credI; amtIdx = aIdx;
         break;
       }
     }
-    
-    // Fallback detection if headers failed
-    if (headerLineIdx === -1) {
-      headerLineIdx = 0;
-      let cols = lines[1] ? parseCsvLine(lines[1], delim) : [];
-      cols.forEach((c, i) => {
-        if(c.match(/\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/) && dtIdx === -1) dtIdx = i;
-        if(c.match(/^-?\d+(\.\d+)?$/) && amtIdx === -1) amtIdx = i;
-        if(c.length > 8 && !c.match(/^\d+$/) && descIdx === -1) descIdx = i;
-      });
+
+    if (headerRowIdx === -1 || dtIdx === -1 || (amtIdx === -1 && debitIdx === -1 && creditIdx === -1)) {
+      toast('Could not detect columns. Ensure CSV has Date, Debit, Credit headers.', 'err');
+      console.log('[CSV] Sample rows:', allRows.slice(0, 4));
+      return;
     }
 
-    if(dtIdx === -1 || (amtIdx === -1 && debitIdx === -1 && creditIdx === -1)) {
-      toast('Could not auto-detect columns. Ensure CSV has Date, Amount/Debit, Details.', 'err'); return;
-    }
+    console.log('[CSV] Header row:', allRows[headerRowIdx]);
+    console.log('[CSV] date:', dtIdx, 'desc:', descIdx, 'debit:', debitIdx, 'credit:', creditIdx);
 
     S.csvParsedRows = [];
     let html = `<div class="csv-table-wrapper"><table class="csv-table">
       <thead><tr><th>Date</th><th>Details</th><th>Type</th><th>Category</th><th>Amount</th></tr></thead><tbody>`;
-    
-    for(let i = headerLineIdx + 1; i < lines.length; i++) {
-      let cols = parseCsvLine(lines[i], delim);
-      if(cols.length <= dtIdx) continue;
-      
+
+    let cleanAmt = (val) => {
+      if (!val) return NaN;
+      let n = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+      return isNaN(n) ? NaN : n;
+    };
+
+    for (let i = headerRowIdx + 1; i < allRows.length; i++) {
+      let cols = allRows[i];
+      if (!cols[dtIdx]) continue;
+
       let rawDate = cols[dtIdx];
-      let rawDesc = descIdx !== -1 && cols[descIdx] ? cols[descIdx] : 'Bank Transaction';
-      
-      let type = 'expense';
-      let displayAmt = 0;
-      
-      let cleanAmt = (val) => {
-        if (!val) return NaN;
-        let parsed = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
-        return isNaN(parsed) ? NaN : parsed;
-      };
+      let rawDesc = (descIdx !== -1 && cols[descIdx]) ? cols[descIdx] : 'Bank Transaction';
 
-      let debitVal = debitIdx !== -1 ? cleanAmt(cols[debitIdx]) : NaN;
+      let debitVal  = debitIdx  !== -1 ? cleanAmt(cols[debitIdx])  : NaN;
       let creditVal = creditIdx !== -1 ? cleanAmt(cols[creditIdx]) : NaN;
-      let amtVal = amtIdx !== -1 ? cleanAmt(cols[amtIdx]) : NaN;
+      let amtVal    = amtIdx    !== -1 ? cleanAmt(cols[amtIdx])    : NaN;
 
-      if (!isNaN(debitVal) && debitVal > 0) {
-        type = 'expense';
-        displayAmt = debitVal;
-      } else if (!isNaN(creditVal) && creditVal > 0) {
-        type = 'income';
-        displayAmt = creditVal;
-      } else if (!isNaN(amtVal) && amtVal !== 0) {
-        type = amtVal < 0 ? 'income' : 'expense';
-        displayAmt = Math.abs(amtVal);
-      } else {
-        continue; 
-      }
+      let type, displayAmt;
+      if (!isNaN(debitVal) && debitVal > 0)        { type = 'expense'; displayAmt = debitVal; }
+      else if (!isNaN(creditVal) && creditVal > 0) { type = 'income';  displayAmt = creditVal; }
+      else if (!isNaN(amtVal) && amtVal !== 0)     { type = amtVal < 0 ? 'income' : 'expense'; displayAmt = Math.abs(amtVal); }
+      else continue;
 
-      // Smart Auto-Categorization
       let lowerDesc = rawDesc.toLowerCase();
-      let cat = type === 'income' ? 'Salary' : 'Other Expense';
-      if(lowerDesc.includes('uber') || lowerDesc.includes('ola') || lowerDesc.includes('irctc') || lowerDesc.includes('fuel') || lowerDesc.includes('petrol')) cat = 'Transport';
-      else if(lowerDesc.includes('swiggy') || lowerDesc.includes('zomato') || lowerDesc.includes('restaurant') || lowerDesc.includes('cafe')) cat = 'Dining Out';
-      else if(lowerDesc.includes('netflix') || lowerDesc.includes('prime') || lowerDesc.includes('spotify') || lowerDesc.includes('apple')) cat = 'Subscriptions';
-      else if(lowerDesc.includes('hospital') || lowerDesc.includes('pharmacy') || lowerDesc.includes('apollo') || lowerDesc.includes('medical')) cat = 'Healthcare';
-      else if(lowerDesc.includes('amazon') || lowerDesc.includes('flipkart') || lowerDesc.includes('myntra')) cat = 'Shopping';
-      else if(lowerDesc.includes('salary') || lowerDesc.includes('payroll')) cat = 'Salary';
+      let cat = type === 'income' ? 'Other Income' : 'Other Expense';
+      if (lowerDesc.includes('salary') || lowerDesc.includes('payroll')) cat = 'Salary';
+      else if (lowerDesc.includes('uber') || lowerDesc.includes('ola') || lowerDesc.includes('irctc') || lowerDesc.includes('fuel') || lowerDesc.includes('petrol')) cat = 'Transport';
+      else if (lowerDesc.includes('swiggy') || lowerDesc.includes('zomato') || lowerDesc.includes('restaurant') || lowerDesc.includes('cafe')) cat = 'Dining Out';
+      else if (lowerDesc.includes('netflix') || lowerDesc.includes('prime') || lowerDesc.includes('spotify')) cat = 'Subscriptions';
+      else if (lowerDesc.includes('hospital') || lowerDesc.includes('pharmacy') || lowerDesc.includes('medical')) cat = 'Healthcare';
+      else if (lowerDesc.includes('amazon') || lowerDesc.includes('flipkart') || lowerDesc.includes('myntra')) cat = 'Shopping';
 
-      let dt = new Date(rawDate);
-      // Force custom parsing for DD/MM/YYYY since native JS treats 01/05/2026 as Jan 5
-      if(rawDate.includes('/') || rawDate.includes('-')) {
-        let parts = rawDate.split(/[-/]/);
+      // Parse DD/MM/YYYY (Indian bank format)
+      let dt = new Date();
+      if (rawDate.includes('/') || rawDate.includes('-')) {
+        let parts = rawDate.trim().split(/[-/]/);
         if (parts.length >= 3) {
-          let p0 = parseInt(parts[0]), p1 = parseInt(parts[1]), p2 = parseInt(parts[2].split(' ')[0]);
+          let p0 = parseInt(parts[0]), p1 = parseInt(parts[1]), p2 = parseInt(parts[2]);
           if (p2 < 100) p2 += 2000;
-          // Assume DD/MM/YYYY format always for Indian context
           dt = new Date(p2, p1 - 1, p0);
         }
       }
-      if(isNaN(dt)) dt = new Date();
-      
+      if (isNaN(dt)) dt = new Date();
+
+      let catOptions = (S.categories[type] || S.categories.expense);
       S.csvParsedRows.push({
-        id: 'tx_csv_' + Date.now().toString(36) + i,
-        type: type, amount: displayAmt, category: cat,
-        title: rawDesc.substring(0,45), entity: 'Bank Import', taxDeductible: false, status: '', recurring: false,
+        id: 'tx_csv_' + Date.now().toString(36) + '_' + i,
+        type, amount: displayAmt, category: cat,
+        title: rawDesc.replace(/\s+/g, ' ').substring(0, 45),
+        entity: 'Bank Import', taxDeductible: false, status: '', recurring: false,
         date: dt.toISOString(),
-        dateStr: dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}),
+        dateStr: dt.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}),
         timeStr: '12:00 PM'
       });
-      
-      let catOptions = (S.categories[type] || S.categories.expense);
-      
+
       html += `<tr>
-        <td>${dt.toLocaleDateString('en-IN', {day:'numeric',month:'short'})}</td>
-        <td>${esc(rawDesc.substring(0,35))}</td>
-        <td><span class="badge ${type==='income'?'badge-accent':'badge-accent'}" style="${type==='income'?'color:var(--income);background:var(--income-dim)':'color:var(--expense);background:var(--expense-dim)'}">${type.toUpperCase()}</span></td>
+        <td>${dt.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'})}</td>
+        <td>${esc(rawDesc.replace(/\s+/g,' ').substring(0, 35))}</td>
+        <td><span class="badge badge-accent" style="${type==='income'?'color:var(--income);background:var(--income-dim)':'color:var(--expense);background:var(--expense-dim)'}">
+          ${type.toUpperCase()}</span></td>
         <td><select class="csv-cat-select" onchange="S.csvParsedRows[${S.csvParsedRows.length-1}].category=this.value">
             ${catOptions.map(c => `<option value="${c}" ${c===cat?'selected':''}>${c}</option>`).join('')}
         </select></td>
-        <td class="${type==='income'?'csv-valid':'csv-invalid'}" style="${type==='income'?'color:var(--income);text-decoration:none':'color:var(--text);text-decoration:none'}">₹${fmt(displayAmt)}</td>
+        <td style="${type==='income'?'color:var(--income)':'color:var(--text)'}">₹${fmt(displayAmt)}</td>
       </tr>`;
     }
-    
+
     if (S.csvParsedRows.length === 0) {
-      toast('No valid transaction rows found in CSV. Check column headers (Date, Debit, Credit)', 'err'); 
-      console.log("CSV Debug - Headers detected:", {dtIdx, debitIdx, creditIdx, amtIdx});
-      console.log("CSV Debug - First 3 Data Rows:", lines.slice(headerLineIdx + 1, headerLineIdx + 4).map(l => parseCsvLine(l, delim)));
+      toast('No valid rows found. Check Debit/Credit columns have numbers.', 'err');
+      console.log('[CSV] Header:', allRows[headerRowIdx]);
+      console.log('[CSV] First data rows:', allRows.slice(headerRowIdx + 1, headerRowIdx + 5));
       return;
     }
 
     html += '</tbody></table></div>';
     document.getElementById('csv-body').innerHTML = html;
     document.getElementById('csv-modal').classList.add('open');
+    toast(`Parsed ${S.csvParsedRows.length} transactions. Review and import!`, 'ok');
   };
   reader.readAsText(file);
 }
