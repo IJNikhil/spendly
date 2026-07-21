@@ -64,6 +64,7 @@
         </div>
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <div class="filters">
+            <select id="dash-account" onchange="clearDashCache(); loadDashboard()"><option value="all">All Accounts</option></select>
             <select id="dash-month" onchange="clearDashCache(); loadDashboard()"></select>
             <select id="dash-year" onchange="clearDashCache(); loadDashboard()"></select>
           </div>
@@ -145,6 +146,7 @@
       <header class="page-header">
         <h1>Ledger</h1>
         <div class="filters">
+          <select id="hist-account" onchange="loadHistory()"><option value="all">All Accounts</option></select>
           <select id="hist-month" onchange="loadHistory()"></select>
           <select id="hist-year" onchange="loadHistory()"></select>
         </div>
@@ -231,11 +233,22 @@
               <span class="toggle-label">Light Mode</span>
             </label>
           </div>
+          <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
+          <h2 class="card-title">Manage Bank Accounts</h2>
+          <p class="text-muted" style="font-size:13px;margin-bottom:16px;">Add your bank accounts (e.g. HDFC - 1234) to track them separately.</p>
+          <div class="input-row" style="margin-bottom:16px;">
+            <div class="input-group flex-1">
+              <input type="text" id="inp-bank-name" placeholder="Bank & Last 4 Digits">
+            </div>
+            <button class="btn btn-primary" onclick="addBankAccount()">Add</button>
+          </div>
+          <div id="bank-accounts-list" style="display:flex; flex-direction:column; gap:8px;"></div>
         </div>
 
         <div class="card max-w-lg">
           <h2 class="card-title">Bank CSV Import (Smart Parser)</h2>
           <p class="text-muted" style="margin-bottom:16px;font-size:14px;">Upload your bank statement. Spendly auto-detects Dates, Debits, Credits and categorizes transactions.</p>
+          <select id="csv-account" class="input" style="margin-bottom:12px; width:100%; border:1px solid var(--border); padding:10px; border-radius:12px; background:var(--surface-hover); color:var(--text);"><option value="Default">Default Account</option></select>
           <input type="file" id="csv-file" accept=".csv" class="btn" style="margin-bottom:12px;background:var(--surface-hover);">
           <button class="btn btn-primary" onclick="processCSV()">Parse CSV</button>
         </div>
@@ -279,6 +292,11 @@
             <label>Date</label>
             <input type="date" id="mod-date">
           </div>
+        </div>
+
+        <div class="input-group">
+          <label>Bank Account</label>
+          <select id="mod-account"><option value="Default">Default</option></select>
         </div>
 
         <div class="input-group">

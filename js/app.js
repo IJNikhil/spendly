@@ -46,6 +46,7 @@ function init() {
   for(let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) ySel.appendChild(new Option(y, y));
 
   // Dashboard
+  renderBankAccounts();
   const dMSel = document.getElementById('dash-month');
   const dYSel = document.getElementById('dash-year');
   dMSel.appendChild(new Option('All Time', 'all'));
@@ -179,7 +180,9 @@ function renderDashboardData(d) {
 function clearDashCache() {
   const m = document.getElementById('dash-month').value;
   const y = document.getElementById('dash-year').value;
-  localStorage.removeItem(`sp_cache_dash_${m}_${y}`);
+  const acc = document.getElementById('dash-account') ? document.getElementById('dash-account').value : 'all';
+  const acc = document.getElementById('dash-account') ? document.getElementById('dash-account').value : 'all';
+  localStorage.removeItem(`sp_cache_dash_${acc}_${m}_${y}`);
 }
 
 function loadDashboard() {
@@ -188,7 +191,7 @@ function loadDashboard() {
   const m = document.getElementById('dash-month').value;
   const y = document.getElementById('dash-year').value;
   const isAllTime = (m === 'all' || y === 'all');
-  const cacheKey = `sp_cache_dash_${m}_${y}`;
+  const cacheKey = `sp_cache_dash_${acc}_${m}_${y}`;
 
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const label = isAllTime ? 'All Time Overview' : `${months[parseInt(m)-1]} ${y}`;
@@ -202,7 +205,7 @@ function loadDashboard() {
     document.getElementById('recent-list').innerHTML = '<div class="loading-state">Syncing data...</div>';
   }
   
-  const url = `${S.url}?action=dashboard&month=${m}&year=${y}`;
+  const url = `${S.url}?action=dashboard&month=${m}&year=${y}&account=${acc}`;
   fetchWithTimeout(url, {})
     .then(r => r.json())
     .then(d => {
@@ -218,7 +221,8 @@ function loadHistory() {
   if(!S.url) return;
   const m = document.getElementById('hist-month').value;
   const y = document.getElementById('hist-year').value;
-  const cacheKey = `sp_cache_hist_${m}_${y}`;
+  const acc = document.getElementById('hist-account') ? document.getElementById('hist-account').value : 'all';
+  const cacheKey = `sp_cache_hist_${acc}_${m}_${y}`;
   
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
@@ -227,7 +231,7 @@ function loadHistory() {
     document.getElementById('hist-list').innerHTML = '<div class="loading-state">Syncing ledger...</div>';
   }
   
-  fetchWithTimeout(`${S.url}?action=history&month=${m}&year=${y}`, {})
+  fetchWithTimeout(`${S.url}?action=history&month=${m}&year=${y}&account=${acc}`, {})
     .then(r => r.json())
     .then(d => {
       if(!d.success) throw new Error();
@@ -660,6 +664,7 @@ function submitTxn() {
   let taxSec = document.getElementById('mod-tax-section').value;
   let payMode = document.getElementById('mod-pay-mode').value;
   let incomeH = document.getElementById('mod-income-head').value;
+  let account = document.getElementById('mod-account').value || 'Default';
 
   let dateStr = dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
   let timeStr = new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'});
@@ -675,7 +680,7 @@ function submitTxn() {
       recurring: isRec,
       taxSection: (S.type === 'expense' || S.type === 'investment') ? taxSec : 'None',
       paymentMode: payMode,
-      incomeHead: (S.type === 'income') ? incomeH : '',
+      incomeHead: (S.type === 'income') ? incomeH : '', bankAccount: account, bankAccount: account,
       date: dt.toISOString(), dateStr: dateStr, timeStr: timeStr
     };
     
@@ -721,7 +726,7 @@ function submitTxn() {
       amount: amt - splitAmt, category: document.getElementById('mod-cat').value,
       title: document.getElementById('mod-title').value, entity: document.getElementById('mod-entity').value,
       taxDeductible: isTax, status: '', recurring: isRec,
-      taxSection: taxSec, paymentMode: payMode, incomeHead: '',
+      taxSection: taxSec, paymentMode: payMode, incomeHead: '', bankAccount: account,
       date: dt.toISOString(), dateStr: dateStr, timeStr: timeStr
     });
     
@@ -731,7 +736,7 @@ function submitTxn() {
       amount: splitAmt, category: 'Other Business',
       title: `Split: ${document.getElementById('mod-title').value}`, entity: splitName,
       taxDeductible: false, status: 'Pending', recurring: false,
-      taxSection: 'None', paymentMode: payMode, incomeHead: '',
+      taxSection: 'None', paymentMode: payMode, incomeHead: '', bankAccount: account,
       date: dt.toISOString(), dateStr: dateStr, timeStr: timeStr
     });
   } else {
@@ -995,12 +1000,13 @@ function processCSV() {
       if (isNaN(dt)) dt = new Date();
 
       let catOptions = (S.categories[type] || S.categories.expense);
+      let account = document.getElementById('csv-account').value || 'Default';
       S.csvParsedRows.push({
         id: 'tx_csv_' + Date.now().toString(36) + '_' + i,
         type, amount: displayAmt, category: cat,
         title: rawDesc.replace(/\s+/g, ' ').substring(0, 45),
         entity: 'Bank Import', taxDeductible: false, status: '', recurring: false,
-        taxSection: 'None', paymentMode: 'Net Banking', incomeHead: type==='income'?'Other Sources':'',
+        taxSection: 'None', paymentMode: 'Net Banking', incomeHead: type==='income'?'Other Sources':'', bankAccount: account,
         date: dt.toISOString(),
         dateStr: dt.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}),
         timeStr: '12:00 PM'
@@ -1392,3 +1398,57 @@ function copyBackendCode() {
 
 
 init();
+
+// --- BANK ACCOUNTS ---
+function getBankAccounts() {
+  return JSON.parse(localStorage.getItem('sp_bank_accounts') || '["Default"]');
+}
+
+function addBankAccount() {
+  const name = document.getElementById('inp-bank-name').value.trim();
+  if(!name) return;
+  const accounts = getBankAccounts();
+  if(!accounts.includes(name)) {
+    accounts.push(name);
+    localStorage.setItem('sp_bank_accounts', JSON.stringify(accounts));
+    renderBankAccounts();
+    toast('Account Added', 'ok');
+  }
+  document.getElementById('inp-bank-name').value = '';
+}
+
+function removeBankAccount(name) {
+  if(name === 'Default') return;
+  const accounts = getBankAccounts().filter(a => a !== name);
+  localStorage.setItem('sp_bank_accounts', JSON.stringify(accounts));
+  renderBankAccounts();
+  toast('Account Removed', 'ok');
+}
+
+function renderBankAccounts() {
+  const accounts = getBankAccounts();
+  
+  const list = document.getElementById('bank-accounts-list');
+  if(list) {
+    list.innerHTML = accounts.map(a => `
+      <div style="display:flex;justify-content:space-between;background:var(--surface-hover);padding:10px 14px;border-radius:8px;">
+        <span>${a}</span>
+        ${a !== 'Default' ? `<button onclick="removeBankAccount('${a}')" style="background:none;border:none;color:var(--expense);cursor:pointer;font-weight:bold;">✕</button>` : ''}
+      </div>
+    `).join('');
+  }
+  
+  const updateSelect = (id, includeAll) => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const currentVal = sel.value;
+    sel.innerHTML = includeAll ? '<option value="all">All Accounts</option>' : '';
+    accounts.forEach(a => sel.appendChild(new Option(a, a)));
+    if(accounts.includes(currentVal) || (includeAll && currentVal === 'all')) sel.value = currentVal;
+  };
+  
+  updateSelect('csv-account', false);
+  updateSelect('mod-account', false);
+  updateSelect('dash-account', true);
+  updateSelect('hist-account', true);
+}

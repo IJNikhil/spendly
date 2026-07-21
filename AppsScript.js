@@ -1,7 +1,7 @@
 // Spendly Pro Backend - CA Grade (Phase 4)
 // Columns: ID(1) Date(2) Time(3) Type(4) Amount(5) Category(6) Title(7) Entity(8)
 //          TaxDeductible(9) Status(10) Month(11) Year(12) Week(13) Recurring(14)
-//          TaxSection(15) PaymentMode(16) IncomeHead(17)
+//          TaxSection(15) PaymentMode(16) IncomeHead(17) BankAccount(18)
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -18,8 +18,8 @@ function doPost(e) {
       ts = ss.insertSheet('Transactions');
       ts.appendRow(['ID','Date','Time','Type','Amount','Category','Title','Entity',
                     'TaxDeductible','Status','Month','Year','Week','Recurring',
-                    'TaxSection','PaymentMode','IncomeHead']);
-      ts.getRange(1,1,1,17).setFontWeight('bold').setBackground('#0a0d14').setFontColor('#ffffff');
+                    'TaxSection','PaymentMode','IncomeHead','BankAccount']);
+      ts.getRange(1,1,1,18).setFontWeight('bold').setBackground('#0a0d14').setFontColor('#ffffff');
       ts.setFrozenRows(1);
     }
 
@@ -42,7 +42,7 @@ function doPost(e) {
       var row = findRowById(ts, d.id);
       if (row > 0) {
         var dt = new Date(d.date);
-        ts.getRange(row, 1, 1, 17).setValues([buildRow(d, dt)]);
+        ts.getRange(row, 1, 1, 18).setValues([buildRow(d, dt)]);
         return success({msg: 'Transaction Updated'});
       }
       return error('Transaction not found');
@@ -56,7 +56,7 @@ function doPost(e) {
         rows.push(buildRow(txn, dt));
       }
       if (rows.length > 0) {
-        ts.getRange(ts.getLastRow() + 1, 1, rows.length, 17).setValues(rows);
+        ts.getRange(ts.getLastRow() + 1, 1, rows.length, 18).setValues(rows);
       }
       return success({msg: rows.length + ' Transactions Added'});
     }
@@ -102,7 +102,7 @@ function buildRow(d, dt) {
     d.category || '', d.title || '', d.entity || '',
     d.taxDeductible ? 'TRUE' : 'FALSE', d.status || '',
     dt.getMonth()+1, dt.getFullYear(), weekNum(dt), d.recurring ? 'TRUE' : 'FALSE',
-    d.taxSection || 'None', d.paymentMode || 'UPI', d.incomeHead || ''
+    d.taxSection || 'None', d.paymentMode || 'UPI', d.incomeHead || '', d.bankAccount || 'Default'
   ];
 }
 
@@ -129,6 +129,7 @@ function doGet(e) {
     if (action === 'dashboard') {
       var monthParam = e.parameter.month;
       var yearParam  = e.parameter.year;
+      var accountParam = e.parameter.account || 'all';
       var isAll = (monthParam === 'all' || yearParam === 'all');
       var month = parseInt(monthParam), year = parseInt(yearParam);
       var income = 0, expense = 0, investment = 0, businessPending = 0;
@@ -140,8 +141,10 @@ function doGet(e) {
         var rAmt  = parseFloat(r[4]) || 0;
         var rM = parseInt(r[10]), rY = parseInt(r[11]);
         var isRec = String(r[13]).toUpperCase() === 'TRUE';
+        var rAcc = String(r[17] || 'Default');
 
         if (rType === 'business' && String(r[9]).toLowerCase() === 'pending') businessPending += rAmt;
+        if (accountParam !== 'all' && rAcc !== accountParam) continue;
         var inScope = isAll || (rM === month && rY === year);
         if (!inScope) continue;
 
@@ -164,10 +167,21 @@ function doGet(e) {
 
     // ─── HISTORY ──────────────────────────────────────────────────
     if (action === 'history') {
-      var month = parseInt(e.parameter.month), year = parseInt(e.parameter.year);
+      var monthParam = e.parameter.month;
+      var yearParam  = e.parameter.year;
+      var accountParam = e.parameter.account || 'all';
+      var isAll = (monthParam === 'all' || yearParam === 'all');
+      var month = parseInt(monthParam), year = parseInt(yearParam);
       var results = [];
       for (var i = data.length - 1; i >= 1; i--) {
-        if (parseInt(data[i][10]) === month && parseInt(data[i][11]) === year) results.push(rowToObj(data[i]));
+        var rAcc = String(data[i][17] || 'Default');
+        if (accountParam !== 'all' && rAcc !== accountParam) continue;
+        
+        if (isAll) {
+          results.push(rowToObj(data[i]));
+        } else if (parseInt(data[i][10]) === month && parseInt(data[i][11]) === year) {
+          results.push(rowToObj(data[i]));
+        }
       }
       return success({transactions: results});
     }
@@ -279,7 +293,8 @@ function rowToObj(row) {
   return {
     id:row[0], dateStr:row[1], timeStr:row[2], type:row[3], amount:row[4],
     category:row[5], title:row[6], entity:row[7], taxDeductible:row[8], status:row[9],
-    recurring:row[13], taxSection:row[14]||'', paymentMode:row[15]||'', incomeHead:row[16]||''
+    recurring:row[13], taxSection:row[14]||'', paymentMode:row[15]||'', incomeHead:row[16]||'',
+    bankAccount:row[17]||'Default'
   };
 }
 
