@@ -1,5 +1,5 @@
 // Spendly Pro Phase 4 - CA Grade Frontend
-const APP_VERSION = 'v2.9';
+const APP_VERSION = 'v2.9.1';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
@@ -638,6 +638,7 @@ function openLoanModal(editId = null) {
   document.getElementById('loan-months').value = '';
   document.getElementById('btn-save-loan').removeAttribute('data-edit-id');
   document.getElementById('loan-modal-title').innerText = 'Add Loan / EMI';
+  document.getElementById('btn-delete-loan').style.display = 'none';
   
   if (editId && typeof editId === 'string') {
     let cached = JSON.parse(localStorage.getItem('sp_cache_dash_all_all_all') || '{}');
@@ -658,6 +659,7 @@ function openLoanModal(editId = null) {
       document.getElementById('loan-months').value = loan.totalMonths;
       document.getElementById('btn-save-loan').setAttribute('data-edit-id', editId);
       document.getElementById('loan-modal-title').innerText = 'Edit Loan';
+      document.getElementById('btn-delete-loan').style.display = 'inline-block';
     }
   }
 }
@@ -690,6 +692,14 @@ function saveLoan() {
       closeLoanModal();
     }).catch(() => toast('Failed to save loan', 'err'))
     .finally(() => { btn.innerText = 'Save Loan'; btn.disabled = false; });
+}
+
+function deleteLoanFromModal() {
+  const editId = document.getElementById('btn-save-loan').getAttribute('data-edit-id');
+  if (editId) {
+    deleteLoan(editId);
+    closeLoanModal();
+  }
 }
 
 function deleteLoan(id) {
@@ -734,8 +744,10 @@ function renderLoans(loans) {
     html += `
       <div class="budget-row" style="padding-bottom:12px; border-bottom:1px solid var(--border)">
         <div class="budget-header" style="margin-bottom:8px;">
-          <span>${esc(l.name)}</span>
-          <button class="icon-btn" style="color:var(--accent); font-size:12px;" onclick="payLoan('${l.id}', ${l.emi}, '${esc(l.name)}')">PAY ₹${fmt(l.emi)}</button>
+          <span style="cursor:pointer; text-decoration:underline;" onclick="openLoanModal('${l.id}')">${esc(l.name)}</span>
+          ${l.paidMonths >= l.totalMonths 
+            ? `<span style="font-size:12px; color:var(--text-dim); font-weight:600; padding:6px 12px;">COMPLETED</span>`
+            : `<button class="icon-btn" style="color:var(--accent); font-size:12px;" onclick="payLoan('${l.id}', ${l.emi}, '${esc(l.name)}')">PAY ₹${fmt(l.emi)}</button>`}
         </div>
         <div class="progress-bar-bg" style="height:6px; margin-top:0;">
           <div class="progress-bar-fill progress-safe" style="width:${pct}%"></div>
