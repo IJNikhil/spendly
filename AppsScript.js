@@ -136,8 +136,11 @@ function doGet(e) {
     var loanData = (ls && ls.getLastRow() >= 2) ? ls.getDataRange().getValues() : [];
 
     if (action === 'dashboard') {
-      var month = parseInt(e.parameter.month);
-      var year = parseInt(e.parameter.year);
+      var monthParam = e.parameter.month;
+      var yearParam = e.parameter.year;
+      var isAllTime = (monthParam === 'all' || yearParam === 'all');
+      var month = parseInt(monthParam);
+      var year = parseInt(yearParam);
       var income = 0, expense = 0, investment = 0, businessPending = 0;
       var recent = [];
       var categoryTotals = {};
@@ -154,7 +157,9 @@ function doGet(e) {
           businessPending += rowAmt;
         }
 
-        if (rowM === month && rowY === year) {
+        var inScope = isAllTime || (rowM === month && rowY === year);
+        
+        if (inScope) {
           if (rowType === 'income') income += rowAmt;
           if (rowType === 'expense') {
             expense += rowAmt;
@@ -162,7 +167,7 @@ function doGet(e) {
             categoryTotals[cat] = (categoryTotals[cat] || 0) + rowAmt;
           }
           if (rowType === 'investment') investment += rowAmt;
-          if (recent.length < 5) recent.push(rowToObj(data[i]));
+          if (recent.length < 10) recent.push(rowToObj(data[i]));
           
           if (isRecurring && rowType === 'expense') {
              subscriptions.push(rowToObj(data[i]));

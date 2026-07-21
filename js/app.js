@@ -1,5 +1,5 @@
 // Spendly Pro Phase 3 - Frontend Logic
-const APP_VERSION = 'v2.4-multiline';
+const APP_VERSION = 'v2.5-alltime';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
@@ -57,6 +57,31 @@ function init() {
   for(let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) {
     let opt = document.createElement('option'); opt.value = y; opt.text = y;
     ySel.appendChild(opt);
+  }
+
+  // Setup Dashboard Selectors (with All Time option)
+  const dMSel = document.getElementById('dash-month');
+  const dYSel = document.getElementById('dash-year');
+  
+  let allOpt = document.createElement('option');
+  allOpt.value = 'all'; allOpt.text = 'All Time';
+  dMSel.appendChild(allOpt);
+  
+  months.forEach((m, i) => {
+    let opt = document.createElement('option');
+    opt.value = i + 1; opt.text = m;
+    if(i === now.getMonth()) opt.selected = true;
+    dMSel.appendChild(opt);
+  });
+  
+  let allYOpt = document.createElement('option');
+  allYOpt.value = 'all'; allYOpt.text = 'All Years';
+  dYSel.appendChild(allYOpt);
+  
+  for(let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) {
+    let opt = document.createElement('option'); opt.value = y; opt.text = y;
+    if(y === now.getFullYear()) opt.selected = true;
+    dYSel.appendChild(opt);
   }
 
   setTxnType('expense');
@@ -161,10 +186,19 @@ function renderDashboardData(d) {
 function loadDashboard() {
   if(!S.url) return;
   const now = new Date();
-  const m = now.getMonth() + 1;
-  const y = now.getFullYear();
-  const cacheKey = `sp_cache_dash_${m}_${y}`;
-  
+  const mSel = document.getElementById('dash-month');
+  const ySel = document.getElementById('dash-year');
+  const m = mSel ? mSel.value : (now.getMonth() + 1);
+  const y = ySel ? ySel.value : now.getFullYear();
+  const isAllTime = (m === 'all' || y === 'all');
+  const cacheKey = isAllTime ? `sp_cache_dash_all` : `sp_cache_dash_${m}_${y}`;
+
+  // Update subtitle label
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const label = isAllTime ? 'All Time Overview' : `${months[parseInt(m)-1]} ${y}`;
+  const sub = document.getElementById('current-date');
+  if(sub) sub.innerText = label;
+
   // 1. Instantly render from cache if available
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
@@ -173,8 +207,12 @@ function loadDashboard() {
     document.getElementById('recent-list').innerHTML = '<div class="loading-state">Syncing data...</div>';
   }
   
-  // 2. Fetch in background and update UI silently
-  fetchWithTimeout(`${S.url}?action=dashboard&month=${m}&year=${y}`, {})
+  // 2. Fetch from backend
+  const url = isAllTime
+    ? `${S.url}?action=dashboard&month=all&year=all`
+    : `${S.url}?action=dashboard&month=${m}&year=${y}`;
+
+  fetchWithTimeout(url, {})
     .then(r => r.json())
     .then(d => {
       if(!d.success) throw new Error(d.error || 'Server error');

@@ -57,10 +57,16 @@
           <h1 id="greeting">Good Morning</h1>
           <p class="subtitle" id="current-date">July 2026</p>
         </div>
-        <button class="btn btn-primary desktop-add-btn" onclick="openModal()">
-          <svg viewBox="0 0 24 24" style="width:18px; height:18px; margin-right:6px; stroke:currentColor; fill:none; stroke-width:2.5; display:inline-block; vertical-align:text-bottom;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          New Entry
-        </button>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div class="filters">
+            <select id="dash-month" onchange="clearCache(); loadDashboard()"></select>
+            <select id="dash-year" onchange="clearCache(); loadDashboard()"></select>
+          </div>
+          <button class="btn btn-primary desktop-add-btn" onclick="openModal()">
+            <svg viewBox="0 0 24 24" style="width:18px; height:18px; margin-right:6px; stroke:currentColor; fill:none; stroke-width:2.5; display:inline-block; vertical-align:text-bottom;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            New Entry
+          </button>
+        </div>
       </header>
       
       <div class="metrics-grid">
@@ -309,7 +315,7 @@
   </div>
 
   <div id="toast"></div>
-  <script src="js/app.js?v=2.4"></script>
+  <script src="js/app.js?v=2.5"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister())); if('caches' in window){caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));} window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=2.3'));
