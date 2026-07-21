@@ -57,6 +57,10 @@
           <h1 id="greeting">Good Morning</h1>
           <p class="subtitle" id="current-date">July 2026</p>
         </div>
+        <button class="btn btn-primary desktop-add-btn" onclick="openModal()">
+          <svg viewBox="0 0 24 24" style="width:18px; height:18px; margin-right:6px; stroke:currentColor; fill:none; stroke-width:2.5; display:inline-block; vertical-align:text-bottom;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          New Entry
+        </button>
       </header>
       
       <div class="metrics-grid">
@@ -120,6 +124,7 @@
         <div class="filters">
           <select id="hist-month" onchange="loadHistory()"></select>
           <select id="hist-year" onchange="loadHistory()"></select>
+          <button class="btn btn-primary desktop-add-btn" onclick="openModal()">New Entry</button>
         </div>
       </header>
       <div class="card"><div id="hist-list" class="txn-list"></div></div>
