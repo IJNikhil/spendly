@@ -197,8 +197,8 @@ body.light-mode .nav-bar { background: rgba(255, 255, 255, 0.8); }
   
   .nav-add-btn {
     order: 2; /* Move right under logo */
-    flex-direction: row; align-items: center; justify-content: center; gap: 8px;
-    margin: 0 0 32px 0; padding: 12px; border-radius: var(--r-md);
+    flex-direction: row; align-items: center; justify-content: center; gap: 6px;
+    margin: 0 12px 24px 12px; padding: 8px 16px; border-radius: var(--r-md);
     background: var(--accent); color: white; border: none;
     cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: none; /* Solid, no glow */
@@ -207,8 +207,8 @@ body.light-mode .nav-bar { background: rgba(255, 255, 255, 0.8); }
   .nav-add-btn:active { transform: scale(0.97); }
   .nav-add-icon { width: auto; height: auto; border-radius: 0; background: transparent; box-shadow: none; margin: 0; display: flex; transition: none;}
   .nav-add-btn:hover .nav-add-icon { transform: none; box-shadow: none; }
-  .nav-add-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.5; }
-  .nav-add-btn span { display: block; color: white; font-size: 14px; font-weight: 600; font-family: var(--font-main); }
+  .nav-add-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.5; }
+  .nav-add-btn span { display: block; color: white; font-size: 13px; font-weight: 600; font-family: var(--font-main); }
   
   .nav-links { order: 3; display: flex; flex-direction: column; gap: 4px; }
   /* Reset mobile order */
