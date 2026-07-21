@@ -1,5 +1,5 @@
 // Spendly Pro Phase 4 - CA Grade Frontend
-const APP_VERSION = 'v2.9.1';
+const APP_VERSION = 'v2.9.2';
 console.log('[Spendly] Running version:', APP_VERSION);
 const S = {
   url: localStorage.getItem('sp_pro_url') || '',
@@ -64,7 +64,7 @@ function flushOfflineQueue() {
   Promise.all(promises).then(() => {
     localStorage.removeItem('sp_offline_queue');
     toast('Offline queue synced', 'ok');
-    invalidateCaches();
+    clearCache();
     if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboard();
   });
 }
@@ -224,7 +224,7 @@ function renderDashboardData(d) {
   }
 }
 
-function clearDashCache() { invalidateCaches(); }
+function clearDashCache() { clearCache(); }
 
 function loadDashboard() {
   if(!S.url) return;

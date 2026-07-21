@@ -230,7 +230,7 @@ function doGet(e) {
                     emi:loanData[i][3],totalMonths:loanData[i][4],paidMonths:loanData[i][5]});
       }
       return success({income:income, expense:expense, investment:investment,
-                      businessPending:businessPending, netFlow:income-expense,
+                      businessPending:businessPending, availableBalance:availableBalance,
                       categories:categoryTotals, recent:recent, subscriptions:subscriptions, loans:loans});
     }
 
