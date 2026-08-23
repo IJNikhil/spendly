@@ -1,88 +1,70 @@
-# Spendly Pro: Complete User Guide
+# Spendly Pro: Production-Grade PWA & Personal Finance Workspace
 
-Welcome to Spendly Pro! This guide explains every feature of your personal finance and tax-tracking application. Spendly Pro is built as a Progressive Web App (PWA), meaning you can install it directly to your phone's home screen and use it offline.
+Spendly Pro (v3.2.0) is a private, local-first personal finance PWA and CA-grade Indian Income Tax Optimizer. It is designed to work completely offline, storing data locally inside your browser's secure cache and backing up to your personal Google Drive AppData folder.
 
-> The current release is split into three web pages: marketing (`index.html`), sign-in (`login.html`), and the direct finance workspace (`workspace.html`). The workspace contains Dashboard, Tax ITR, Loans, and Settings.
-
-### Google Drive Sign-in and Backup
-Add a Google OAuth Web Client ID to the `google-client-id` meta tag in `index.html`. In Google Cloud Console, enable the Google Drive API, configure the deployed site as an authorized JavaScript origin, and allow the `drive.appdata` scope. Spendly stores one `spendly_db.json` backup in the user's hidden Drive app-data area and does not access other Drive files.
+The live application is hosted at: **[https://ijnikhil.github.io/spendly/](https://ijnikhil.github.io/spendly/)**
 
 ---
 
-### 1. The Dashboard (Your Financial Command Center)
-The Dashboard gives you an instant overview of your financial health:
+## 🔒 Security Architecture (Zero-Trust & Private-by-Design)
 
-* **Available Balance:** Represents your real-time cumulative net cash (Total Income − Expenses − Investments) up to today. Filtering by a specific Bank Account shows the true balance for that specific account.
-* **Income / Expenses / Invested Cards:** These three metrics display activity strictly for the currently selected Month and Year.
-* **Account filter:** Use the account dropdown to recalculate the balance and current-month ledger for one account.
-* **Current-month view:** Budgets and the recent ledger show records from the current calendar month.
-
----
-
-### 2. Smart Budgets
-Set monthly spending caps for individual categories (e.g., "Dining Out", "Groceries"):
-
-* **Persistent Rules:** Once you set a category budget, Spendly saves it permanently. At the start of every new month, spending counters reset to zero automatically while preserving your budget targets and past month records.
-* **Visual Progress Bars:** Spendly tracks your current month's category spending against your limit using color-coded bars:
-  * **Green:** Safe (< 75% used)
-  * **Yellow:** Caution (75%–99% used)
-  * **Red:** Budget Exceeded (≥ 100% used)
-* **Edit / Delete:** Click any budget row to adjust monthly limits or remove a category budget.
+Spendly Pro is built with a **100% serverless, zero-trust security model**:
+* **No Server-Side Storage**: We do not run databases or middleware servers. Your transactions, budgets, and bank account balances never leave your device.
+* **Google Drive AppData Folder Sync**: Backups are written to a hidden, application-specific directory on your personal Google Drive (the `appDataFolder`). Spendly Pro **cannot** read, write, or access any other files or folders in your general Google Drive.
+* **Zero Hardcoded Secrets**: Because the app communicates directly with Google's REST APIs using dynamically generated client-side OAuth access tokens, the source code contains absolutely no private database keys or API secret credentials.
+* **Google OAuth JavaScript Origin Validation**: The Google Client ID configured in the HTML is safe to expose publicly on GitHub. Google enforces that OAuth tokens are only issued to requests originating from authorized URLs (e.g., `https://ijnikhil.github.io`).
 
 ---
 
-### 3. Active EMIs & Loans
-Track active debts and keep your monthly cash flow synced with your loan payments:
+## 🚀 Key Features
 
-* **Adding a Loan:** Click "Add Loan" and enter the Loan Name, Principal, Monthly EMI, and Total Duration (in months).
-* **Recording a Payment:** Clicking the **PAY** button increments your "Paid Months" counter by 1 and automatically logs a new Expense transaction for today's date under the category `"EMI / Loan Payment"`.
-* **Completion Badge:** Once `Paid Months = Total Months`, the PAY button converts to a **COMPLETED** badge to prevent duplicate charges.
-* **Historical Record:** Paid EMIs remain permanently recorded in your ledger history for audit and tax reference.
+### 1. Unified Workspace Cockpit & Account Balances
+* **Double-Entry Balance Engine**: Tracks assets, cards, and cash wallets across your accounts in real time.
+* **Global Cash Flow Calculator**: Computes `Available Balance = Income − (Expenses + Investments)` automatically. Internal account-to-account transfers correctly debit the source wallet and credit the target wallet without double-counting global income or expenses.
+* **Real-time Status Feed**: An animated status chip in the top navigation header provides direct visual feedback:
+  * 🟢 **Drive Synced**: Connected and fully backed up.
+  * 🔵 **Syncing...**: Cloud synchronization actively in progress.
+  * 🟡 **Sync paused**: Local changes are saved locally, awaiting reconnection.
+  * ⚪ **Local-first**: Running offline without Drive integration.
 
----
+### 2. Robust PhonePe Statement Ingestion (India Standard)
+* **Auto Header Discovery**: The CSV import engine automatically scans the first 10 rows of statement files to discover table headers. This prevents parsing crashes when CSV files contain preamble metadata rows.
+* **Payment Instrument Normalization**: Verbosely formatted debit instruments (e.g., `"Debited from Bank Account - HDFC BANK (•••• 4321)"`) are automatically scrubbed and normalized (e.g., `"HDFC ••4321"`).
+* **Auto-Provisioning Account Allocation**: The parser matches transactions against your bank list. If a transaction belongs to a bank account not currently in your system, Spendly automatically provisions the account to prevent ingestion friction.
+* **Robust Date Normalization**: Successfully parses `DD/MM/YYYY` and `DD-MM-YYYY` formats (common in Indian exports) into standardized ISO `YYYY-MM-DD` database records.
 
-### 4. Multi-Account Management
-Seamlessly track multiple bank accounts, wallets, and credit cards:
+### 3. CA-Grade Indian Tax Optimizer (FY 2025–26 & FY 2026–27)
+* **Budget 2025 Slabs**: Supports the updated New Tax Regime slabs (standard deduction of ₹75,000 and Section 87A full rebate up to ₹12 Lakh).
+* **Section 87A Marginal Relief**: Includes precise marginal relief calculations for net incomes slightly above ₹12 Lakh.
+* **Deduction Breakdown (Old Regime)**: Tracks claims across standard caps including Section 80C (₹1.5L limit), Section 80D (health insurance up to ₹50k for senior citizen parents), Section 80TTA, NPS, and home loans (Section 24b up to ₹2L).
 
-* **Account Setup:** Add accounts (e.g., "HDFC Bank", "ICICI Credit Card", "Cash Wallet") in **Settings > Account Manager**.
-* **Transaction Linking:** Every income, expense, or transfer is linked to a specific account.
-* **Global Account Filter:** Filter the Dashboard or Ledger by a specific account, or select `"All Accounts"` to view your total net worth.
-
----
-
-### 5. Logging Transactions (New Entry)
-Click the floating **+** button to log financial entries across four distinct modes:
-
-* **Income & Expense:** Standard personal transactions. Assign category, date, payment mode, and bank account.
-* **Business (Reimbursable):** Log out-of-pocket expenses made for clients/employers. Mark as **Pending** to track unreimbursed money via the Dashboard Banner until marked **Settled**.
-* **Investment & Tax:** Log tax-saving investments (Mutual Funds, PPF, LIC). Tag specific Indian Tax Sections (80C, 80D, Sec 24B) for automatic tax calculation.
-
----
-
-### 6. Ledger & History
-A complete searchable record of all past financial actions:
-
-* **Color-Coded Rows:** Green for Income, Red for Expense, Blue for Investment.
-* **Instant Search & Filter:** Filter by Month, Year, Bank Account, or search keywords in real time.
-* **Mobile Swipe Actions:** On mobile, **Swipe Left** on a row to reveal the **Delete** button.
+### 4. Smart Budgets & Active EMIs
+* **Persistent Category Budgets**: Configure monthly limits with live progress bars. Counters reset automatically at the beginning of each calendar month.
+* **EMI Tracker**: Log loan details (EMI, Principal, Duration). Clicking **Pay EMI** increments payment counts and automatically logs transactions to prevent double-posting.
 
 ---
 
-### 7. Tax & ITR Center (CA-Grade)
-Designed specifically for Indian Financial Years (April 1st to March 31st):
+## 🛠️ Deploying & Hosting on GitHub Pages
 
-* **FY Crossover Support:** Select an FY (e.g., FY 2025–26) to correctly pull records from April 1 to March 31.
-* **Income Heads Breakdown:** Automatically categorizes income into standard heads: *Salary, Business, STCG, LTCG, and Other Sources*.
-* **Deduction Engine:** Aggregates tagged investments (80C limit ₹1.5L, 80D limit ₹25k, etc.) and applies the New Tax Regime Standard Deduction (₹75,000) and Sec 87A rebate logic.
-* **Custom Date Range P&L:** Generate and export a Profit & Loss statement for any custom date range.
+Since Spendly Pro is fully client-side, you can host your own version for free on GitHub Pages:
 
----
+1. Create a repository on GitHub (e.g., `spendly`).
+2. Clone this project repository, configure your files, and push them to your repository main branch:
+   ```bash
+   git init
+   git remote add origin https://github.com/YOUR_USERNAME/spendly.git
+   git add .
+   git commit -m "Deploy Spendly Pro"
+   git branch -M main
+   git push -u origin main --force
+   ```
+3. Go to your GitHub repository **Settings** $\rightarrow$ **Pages**. Under **Branch**, select **`main`** and click **Save**.
 
-### 8. Offline Mode & Background Sync
-* **Offline Queue:** If internet connection drops, transactions are securely saved in local storage (`sp_offline_queue`).
-* **Auto-Sync:** As soon as network connectivity is restored, Spendly automatically flushes the queue to your Google Sheets backend without data loss.
-
----
-
-### 9. Backend Setup
-The personal workspace uses Google Drive backup for non-technical users. The legacy Apps Script connection remains available only for maintainers and is not shown in the workspace. If enabled for maintenance, set the Apps Script project property `SPENDLY_SECRET` before deploying it.
+### Google OAuth Consent Screen Setup
+To enable Google Drive backup syncing on your live site, go to the **Google Cloud Console** and register your domain:
+*   **Authorized Domains**: `github.io`
+*   **Application Home Page**: `https://YOUR_USERNAME.github.io/spendly/`
+*   **Application Privacy Policy**: `https://YOUR_USERNAME.github.io/spendly/privacy.html`
+*   **Application Terms of Service**: `https://YOUR_USERNAME.github.io/spendly/terms.html`
+*   **Authorized JavaScript Origins**: `https://YOUR_USERNAME.github.io`
+*   **OAuth Scopes**: `email`, `profile`, `openid`, and `https://www.googleapis.com/auth/drive.appdata`
