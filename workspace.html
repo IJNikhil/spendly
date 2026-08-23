@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Spendly Pro — Workspace</title>
+  <meta name="google-client-id" content="457752528049-p2o4m3ip72v5fl96u9glau80opr1nl8j.apps.googleusercontent.com">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#08090d">
+  <link rel="stylesheet" href="css/styles.css?v=3.2.0">
+</head>
+<body>
+  <div id="app" class="app-container">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-badge">PRO</span>
+        <h1>Spendly</h1>
+      </div>
+      <div class="header-actions">
+        <button id="theme-toggle-header" class="icon-btn theme-toggle-btn" aria-label="Toggle Theme">
+          <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg class="moon-icon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Views Container -->
+    <main id="main-viewport">
+      <!-- VIEW: Dashboard -->
+      <section id="view-dashboard" class="app-view active" aria-labelledby="dashboard-title">
+        <div class="view-heading">
+          <div>
+            <span class="eyebrow">MONEY OVERVIEW</span>
+            <h2 id="dashboard-title">Your financial cockpit</h2>
+            <p>Know what is available, what is committed, and what comes next.</p>
+          </div>
+          <span id="global-status-chip" class="status-chip offline"><span class="status-dot"></span><span>Local-first</span></span>
+        </div>
+        <!-- Floating Hero Balance Unit -->
+        <div class="hero-card">
+          <div class="hero-meta">Total Available Balance</div>
+          <div class="hero-balance" id="hero-avail-bal">₹ 0.00</div>
+          <div class="hero-split">
+            <div class="hero-split-item income">
+              <span class="split-dot"></span>
+              <span class="split-label">Income</span>
+              <span class="split-val" id="hero-inc-val">+₹0.00</span>
+            </div>
+            <div class="hero-split-divider"></div>
+            <div class="hero-split-item expense">
+              <span class="split-dot"></span>
+              <span class="split-label">Expense</span>
+              <span class="split-val" id="hero-exp-val">-₹0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Account Filter & Quick Actions -->
+        <div class="section-toolbar">
+          <div class="select-wrapper">
+            <select id="dash-account-filter" onchange="renderDashboard()">
+              <option value="ALL">All Accounts</option>
+            </select>
+            <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <button id="btn-quick-add" class="btn-primary" onclick="openTxnModal()">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Record
+          </button>
+        </div>
+
+        <!-- Account Balances Card -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3>Account Balances</h3>
+          </div>
+          <div id="dashboard-balances-list" class="account-balances-list">
+            <!-- Dynamic account balances rendered here -->
+          </div>
+        </div>
+
+        <!-- Monthly Budgets Card -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3>Monthly Category Budgets</h3>
+            <button class="btn-text" onclick="openBudgetModal()">Set Limits</button>
+          </div>
+          <div id="budget-gauges-list" class="budget-list">
+            <div class="empty-state">No category limits configured.</div>
+          </div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3>Recent Ledger</h3>
+            <span class="swipe-hint">Swipe left to delete</span>
+          </div>
+          <div id="dashboard-txns-list" class="txn-stream">
+            <div class="empty-state">No transactions recorded this month.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: Tax Center (ITR) -->
+      <section id="view-itr" class="app-view" aria-labelledby="itr-title">
+        <div class="view-heading compact-heading"><div><span class="eyebrow">TAX CENTER</span><h2 id="itr-title">Plan before you file.</h2><p>Compare regimes using your recorded income and deductions.</p></div></div>
+        <div class="content-card">
+          <div class="card-header">
+            <h3>Indian Income Tax Optimizer</h3>
+            <div class="select-wrapper mini">
+              <select id="itr-fy-select" onchange="calculateTaxCenter()">
+                <option value="2026" selected>FY 2025–26 (Budget 2025)</option>
+                <option value="2025">FY 2024–25 (Legacy)</option>
+              </select>
+              <svg class="chevron" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+
+          <div class="segmented-control" id="tax-regime-switcher">
+            <div class="segment-glider"></div>
+            <button type="button" class="segment-btn active" data-regime="new" onclick="setTaxRegime('new')">New Regime</button>
+            <button type="button" class="segment-btn" data-regime="old" onclick="setTaxRegime('old')">Old Regime</button>
+          </div>
+
+          <div class="tax-comparison-grid">
+            <div class="tax-stat-box">
+              <span class="stat-label">Taxable Gross</span>
+              <span class="stat-value" id="tax-gross-income">₹0</span>
+            </div>
+            <div class="tax-stat-box">
+              <span class="stat-label">Total Deductions</span>
+              <span class="stat-value" id="tax-total-deductions">₹0</span>
+            </div>
+            <div class="tax-stat-box highlight">
+              <span class="stat-label">Net Payable Tax</span>
+              <span class="stat-value" id="tax-net-liability">₹0</span>
+            </div>
+          </div>
+
+          <div class="tax-options-bar">
+            <label class="checkbox-container">
+              <input type="checkbox" id="itr-senior-parent" onchange="calculateTaxCenter()">
+              <span class="checkmark"></span>
+              Include Senior Citizen Parents (Section 80D up to ₹50,000)
+            </label>
+          </div>
+
+          <div id="itr-deductions-breakdown" class="deductions-list"></div>
+        </div>
+      </section>
+
+      <!-- VIEW: Loans & EMIs -->
+      <section id="view-loans" class="app-view" aria-labelledby="loans-title">
+        <div class="view-heading compact-heading"><div><span class="eyebrow">COMMITMENTS</span><h2 id="loans-title">Stay ahead of repayments.</h2><p>Track every EMI and see how much time is left.</p></div></div>
+        <div class="content-card">
+          <div class="card-header">
+            <h3>Active Loans & Payoffs</h3>
+            <button class="btn-primary mini" onclick="openLoanModal()">+ New Loan</button>
+          </div>
+          <div id="loans-cards-list" class="loans-grid">
+            <div class="empty-state">No active loans being tracked.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: Profile & Account Settings -->
+      <section id="view-profile" class="app-view">
+        <div class="view-heading compact-heading">
+          <div>
+            <span class="eyebrow">PROFILE WORKSPACE</span>
+            <h2>My Profile</h2>
+            <p>Manage accounts, preferences, private cloud backups, and data controls.</p>
+          </div>
+        </div>
+
+        <!-- 1. Google Account Connection Card -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3>Google Account</h3>
+            <span id="gdrive-status-badge" class="badge-status">Not connected</span>
+          </div>
+          <p class="card-desc">Connect your Google account to back up your encrypted workspace directly to your private Google Drive AppData folder.</p>
+          
+          <div id="gdrive-profile-card" class="gdrive-profile-card" style="display:none">
+            <img id="gdrive-avatar" class="gdrive-avatar" src="" alt="Google Profile Avatar">
+            <div class="gdrive-user-details">
+              <strong id="gdrive-username">Name</strong>
+              <span id="gdrive-email">Email</span>
+            </div>
+          </div>
+          
+          <div class="card-footer-actions">
+            <button id="btn-gdrive-toggle" class="btn-primary" onclick="handleGoogleSignIn()">Connect Google Drive</button>
+          </div>
+        </div>
+
+        <!-- 2. Google Drive AppData Cloud Backup Operations -->
+        <div class="content-card" id="card-gdrive-sync" style="display:none">
+          <div class="card-header">
+            <h3>Private Backup & Restore</h3>
+          </div>
+          <p class="card-desc">Back up your ledger, budgets, and loans snapshot or restore a previous cloud backup snapshot.</p>
+          <div class="card-footer-actions">
+            <button id="btn-gdrive-sync" class="btn-primary" onclick="syncWithGoogleDrive(true)">Back Up Now</button>
+            <button id="btn-gdrive-restore" class="btn-secondary" onclick="restoreDriveBackup()">Restore Backup</button>
+          </div>
+        </div>
+
+        <!-- 3. Personal Setup (My Accounts) -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3>Personal Accounts</h3>
+          </div>
+          <p class="card-desc">Keep your bank accounts, cards, and cash wallets organized for accurate balances.</p>
+          <div id="accounts-management-list" class="accounts-list">
+            <!-- Dynamic account pills rendered here -->
+          </div>
+          <div class="account-add-form">
+            <input type="text" id="new-account-name" placeholder="e.g. Salary Account" required>
+            <button class="btn-primary mini" onclick="addNewAccount()">Add Account</button>
+          </div>
+        </div>
+
+        <!-- 4. Preferences & Danger Zone -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3>Preferences & Data Controls</h3>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div>
+              <strong>Visual Theme</strong>
+              <p class="card-desc" style="margin-bottom:0;">Switch between dark obsidian and pearl light modes.</p>
+            </div>
+            <button id="theme-toggle-settings" class="btn-secondary mini theme-toggle-btn">Toggle Theme</button>
+          </div>
+          
+          <div class="settings-row danger-zone" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong style="color:var(--expense); font-size:0.85rem;">Danger Zone</strong>
+              <p class="card-desc" style="margin-bottom:0;">Reset workspace. This clears all local ledger records and configurations.</p>
+            </div>
+            <button class="btn-primary" style="background:var(--expense); width:auto; border:none; padding:8px 14px; font-size:0.8rem;" onclick="resetWorkspace()">Reset Workspace</button>
+          </div>
+        </div>
+
+        <!-- 5. PhonePe Statement Ingestion -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3>PhonePe Statement Ingestion</h3>
+          </div>
+          <p class="card-desc">Direct in-browser statement reader. 100% private. Data is parsed locally on your device.</p>
+          <div class="dropzone" id="phonepe-dropzone" onclick="document.getElementById('phonepe-file-input').click()">
+            <svg viewBox="0 0 24 24" width="36" height="36" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <div class="dropzone-text">
+              <strong>Select or Drop PhonePe CSV</strong>
+              <span>Processes statements with automatic deduplication</span>
+            </div>
+            <input type="file" id="phonepe-file-input" accept=".csv" style="display:none" onchange="handlePhonePeFile(this.files[0])">
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Floating Bottom Navigation -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="switchView('dashboard')">
+        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Ledger</span>
+      </button>
+      <button class="nav-item" onclick="switchView('itr')">
+        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Tax ITR</span>
+      </button>
+      <button class="nav-item" onclick="switchView('loans')">
+        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><line x1="12" y1="6" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="18"/></svg>
+        <span>Loans</span>
+      </button>
+      <button class="nav-item" onclick="switchView('profile')">
+        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>Profile</span>
+      </button>
+    </nav>
+
+    <!-- MODAL: Transaction Entry & Internal Transfers -->
+    <div id="modal-txn" class="modal-backdrop">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3 id="modal-txn-title">New Entry</h3>
+          <button class="close-btn" aria-label="Close transaction dialog" onclick="closeTxnModal()">✕</button>
+        </div>
+
+        <div class="segmented-control" id="txn-type-glider-bar">
+          <div class="segment-glider"></div>
+          <button type="button" class="segment-btn active" data-type="expense" onclick="setTxnType('expense')">Expense</button>
+          <button type="button" class="segment-btn" data-type="income" onclick="setTxnType('income')">Income</button>
+          <button type="button" class="segment-btn" data-type="transfer" onclick="setTxnType('transfer')">Transfer</button>
+          <button type="button" class="segment-btn" data-type="investment" onclick="setTxnType('investment')">Invest</button>
+        </div>
+
+        <form id="form-txn" onsubmit="submitTxnForm(event)">
+          <div class="input-well">
+            <label for="txn-amount">Amount (INR)</label>
+            <input type="number" step="0.01" id="txn-amount" placeholder="0.00" required>
+          </div>
+
+          <!-- Normal Account Select -->
+          <div id="wrap-single-account" class="input-well">
+            <label for="txn-account">Account</label>
+            <div class="select-wrapper">
+              <select id="txn-account"></select>
+              <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+
+          <!-- Transfer Dual-Account Selection -->
+          <div id="wrap-transfer-accounts" class="transfer-accounts-grid" style="display:none">
+            <div class="input-well">
+              <label for="txn-from-account">From Account</label>
+              <div class="select-wrapper">
+                <select id="txn-from-account"></select>
+                <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+            <div class="input-well">
+              <label for="txn-to-account">To Account</label>
+              <div class="select-wrapper">
+                <select id="txn-to-account"></select>
+                <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <div id="wrap-category" class="input-well">
+            <label for="txn-category">Category</label>
+            <div class="select-wrapper">
+              <select id="txn-category"></select>
+              <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+
+          <div id="wrap-tax-section" class="input-well">
+            <label for="txn-tax-sec">Tax Exemption Section</label>
+            <div class="select-wrapper">
+              <select id="txn-tax-sec">
+                <option value="None">None</option>
+                <option value="80C">Section 80C (PPF, ELSS, EPF)</option>
+                <option value="80D">Section 80D (Health Insurance)</option>
+                <option value="80E">Section 80E (Education Loan)</option>
+                <option value="80G">Section 80G (Charity/Donations)</option>
+                <option value="80TTA">Section 80TTA (Savings Interest)</option>
+                <option value="80CCD">Section 80CCD (NPS Tier-1)</option>
+                <option value="24b">Section 24(b) (Home Loan Interest)</option>
+                <option value="HRA">House Rent Allowance (HRA)</option>
+              </select>
+              <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+
+          <div class="input-well">
+            <label for="txn-desc">Description / Note</label>
+            <input type="text" id="txn-desc" placeholder="Merchant or description" required>
+          </div>
+
+          <div class="input-well">
+            <label for="txn-date">Date</label>
+            <input type="date" id="txn-date" required>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" onclick="closeTxnModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Save Record</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: Category Budget -->
+    <div id="modal-budget" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="budget-modal-title">
+      <div class="modal-container">
+        <div class="modal-header">
+          <div><span class="modal-kicker">MONTHLY PLAN</span><h3 id="budget-modal-title">Set a category limit</h3></div>
+          <button class="close-btn" aria-label="Close budget dialog" onclick="closeBudgetModal()">✕</button>
+        </div>
+        <form id="form-budget" onsubmit="submitBudgetForm(event)">
+          <div class="input-well"><label for="budget-category">Category</label><div class="select-wrapper"><select id="budget-category"></select><svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg></div></div>
+          <div class="input-well"><label for="budget-limit">Monthly limit (INR)</label><input type="number" id="budget-limit" min="1" step="0.01" placeholder="5000" required></div>
+          <div class="modal-footer"><button type="button" class="btn-secondary" onclick="closeBudgetModal()">Cancel</button><button type="submit" class="btn-primary">Save limit</button></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: Add Loan -->
+    <div id="modal-loan" class="modal-backdrop">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3 id="loan-modal-title">Track Loan / EMI</h3>
+          <button class="close-btn" aria-label="Close loan dialog" onclick="closeLoanModal()">✕</button>
+        </div>
+        <form id="form-loan" onsubmit="submitLoanForm(event)">
+          <div class="input-well">
+            <label for="loan-name">Loan Identifier / Lender</label>
+            <input type="text" id="loan-name" placeholder="HDFC Home Loan" required>
+          </div>
+          <div class="input-well">
+            <label for="loan-type-select">Loan Classification</label>
+            <div class="select-wrapper">
+              <select id="loan-type-select">
+                <option value="home">Home Loan (Eligible for Sec 24b)</option>
+                <option value="education">Education Loan (Eligible for Sec 80E)</option>
+                <option value="auto">Auto / Vehicle Loan</option>
+                <option value="personal">Personal Loan</option>
+                <option value="other">Other</option>
+              </select>
+              <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+          <div class="input-well">
+            <label for="loan-total">Original Loan Amount (₹)</label>
+            <input type="number" step="0.01" id="loan-total" required>
+          </div>
+          <div class="input-well">
+            <label for="loan-emi">Monthly EMI Amount (₹)</label>
+            <input type="number" step="0.01" id="loan-emi" required>
+          </div>
+          <div class="input-well">
+            <label for="loan-tenure">Tenure (Months)</label>
+            <input type="number" id="loan-tenure" required>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" onclick="closeLoanModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Track Loan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: PhonePe Statement Import Summary -->
+    <div id="modal-phonepe-summary" class="modal-backdrop">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3>PhonePe Import Summary</h3>
+          <button class="close-btn" aria-label="Close import dialog" onclick="closePhonePeModal()">✕</button>
+        </div>
+        <div class="import-summary-body">
+          <div class="summary-stats-grid">
+            <div class="summary-stat-box">
+              <span class="stat-num" id="imp-total-rows">0</span>
+              <span class="stat-lbl">Analyzed</span>
+            </div>
+            <div class="summary-stat-box green">
+              <span class="stat-num" id="imp-new-rows">0</span>
+              <span class="stat-lbl">Ready to Add</span>
+            </div>
+            <div class="summary-stat-box yellow">
+              <span class="stat-num" id="imp-dup-rows">0</span>
+              <span class="stat-lbl">Skipped Dups</span>
+            </div>
+          </div>
+          <p class="import-summary-note">All records are parsed client-side and matched against existing IDs to prevent duplicates.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" onclick="closePhonePeModal()">Discard</button>
+          <button type="button" id="btn-confirm-import" class="btn-primary" onclick="executePhonePeImport()">Confirm & Sync</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="js/app.js?v=3.2.0"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js?v=3.2.0').catch(console.error);
+    }
+  </script>
+</body>
+</html>
+
