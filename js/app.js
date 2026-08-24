@@ -3,6 +3,14 @@
  * Zero-Friction, High-Performance Personal Finance & Tax Engine
  */
 
+// Global Exception & Unhandled Rejection Listeners
+window.addEventListener('error', (e) => {
+  console.error('[Spendly:GlobalError] Uncaught window error:', e.message, 'at', `${e.filename}:${e.lineno}:${e.colno}`, e.error);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[Spendly:GlobalError] Unhandled Promise Rejection:', e.reason);
+});
+
 const APP_VERSION = '3.0.0';
 const CACHE_KEY_TXNS = 'sp_txns_cache';
 const CACHE_KEY_ACCOUNTS = 'sp_accounts_cache';
@@ -12,9 +20,15 @@ const CACHE_KEY_LOANS = 'sp_loans_cache';
 function readCache(key, fallback) {
   try {
     const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
+    if (!value) {
+      console.debug(`[Spendly:Cache] No cached data for "${key}", using default.`);
+      return fallback;
+    }
+    const parsed = JSON.parse(value);
+    console.debug(`[Spendly:Cache] Loaded "${key}":`, Array.isArray(parsed) ? `${parsed.length} items` : typeof parsed === 'object' && parsed !== null ? `${Object.keys(parsed).length} entries` : parsed);
+    return parsed;
   } catch (error) {
-    console.warn(`Could not read ${key}; using an empty local cache.`, error);
+    console.warn(`[Spendly:Cache] Could not parse "${key}"; using fallback local cache.`, error);
     return fallback;
   }
 }
@@ -37,6 +51,8 @@ const S = {
   userProfile: readCache('spendly_user_profile', null)
 };
 
+console.info(`[Spendly:Init] State loaded with ${S.transactions.length} txns, ${S.accounts.length} accounts, ${Object.keys(S.budgets).length} budgets, ${S.loans.length} loans.`);
+
 // Integer-Paise Math Precision Helpers
 const toPaise = (rupees) => Math.round(parseFloat(rupees || 0) * 100);
 const fromPaise = (paise) => (paise || 0) / 100;
@@ -49,8 +65,12 @@ let driveTokenClient = null;
    Initialization & Direct Dashboard Launch
    -------------------------------------------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
+  console.info(`[Spendly:Init] DOMContentLoaded triggered on path: "${window.location.pathname}" (search: "${window.location.search}")`);
   const isWorkspacePage = window.location.pathname.endsWith('/workspace.html') || window.location.search.includes('workspace=1');
-  if (isWorkspacePage && localStorage.getItem('spendly_drive_connected') !== 'true') {
+  const isConnected = localStorage.getItem('spendly_drive_connected') === 'true';
+
+  if (isWorkspacePage && !isConnected) {
+    console.warn('[Spendly:Init] Unauthenticated attempt to access workspace.html. Redirecting to login.html.');
     window.location.href = 'login.html';
     return;
   }
@@ -66,25 +86,32 @@ document.addEventListener('DOMContentLoaded', () => {
   initFileDropzone();
   window.addEventListener('resize', setupSegmentGliders);
   window.addEventListener('online', () => {
+    console.info('[Spendly:Network] Device is back ONLINE. Checking Drive sync...');
     if (localStorage.getItem('spendly_drive_connected') === 'true') {
       showToast('Connection restored. Syncing...', 'info');
       syncDriveBackup(true);
     }
   });
+  window.addEventListener('offline', () => {
+    console.warn('[Spendly:Network] Device is now OFFLINE. Operating in local-first mode.');
+    updateStatusChip('offline', 'Local-first');
+  });
   initInteractionPolish();
 
   // Try to restore/sync Drive backup if already connected
-  if (localStorage.getItem('spendly_drive_connected') === 'true') {
+  if (isConnected) {
+    console.info('[Spendly:Auth] Existing Drive connection detected. Polling for Google Identity Services...');
     let retries = 0;
     const checkGsi = setInterval(() => {
       if (window.google?.accounts?.oauth2) {
         clearInterval(checkGsi);
+        console.info('[Spendly:Auth] Google Identity Services loaded. Initiating automatic sign-in check.');
         signInWithGoogle();
       } else {
         retries++;
         if (retries >= 30) {
           clearInterval(checkGsi);
-          console.warn('Google Identity Services script failed to load in time.');
+          console.warn('[Spendly:Auth] Google Identity Services script failed to load after 15 seconds.');
           setDriveStatus('Connection timed out (verify network)', false);
         }
       }
@@ -100,27 +127,37 @@ function initEntryFlow() {
   const isWorkspacePage = window.location.pathname.endsWith('/workspace.html') || window.location.search.includes('workspace=1');
   const isSignInPage = window.location.hash === '#signin';
   const hasEntered = !isSignInPage && (isWorkspacePage || localStorage.getItem('spendly_workspace_entered') === 'true' || localStorage.getItem('spendly_drive_connected') === 'true');
+  console.debug('[Spendly:Init] Entry flow status:', { isWorkspacePage, isSignInPage, hasEntered });
   welcome.hidden = hasEntered || isSignInPage;
   if (auth) auth.hidden = !isSignInPage;
   workspaceParts.forEach(part => { part.hidden = !hasEntered; });
 }
 
 function showAuthPage() {
+  console.debug('[Spendly:Navigation] Switching to Auth Page.');
   document.getElementById('view-landing')?.setAttribute('hidden', '');
   const auth = document.getElementById('view-auth');
   if (auth) auth.hidden = false;
 }
 
 function showLandingPage() {
+  console.debug('[Spendly:Navigation] Switching to Landing Page.');
   document.getElementById('view-auth')?.setAttribute('hidden', '');
   document.getElementById('view-landing')?.removeAttribute('hidden');
 }
 
 function getGoogleClientId() {
-  return document.querySelector('meta[name="google-client-id"]')?.content.trim() || '';
+  const clientId = document.querySelector('meta[name="google-client-id"]')?.content.trim() || '';
+  if (!clientId) {
+    console.warn('[Spendly:Auth] <meta name="google-client-id"> is missing or has empty content.');
+  } else {
+    console.debug('[Spendly:Auth] Resolved Google Client ID:', clientId.substring(0, 15) + '...');
+  }
+  return clientId;
 }
 
 function setDriveStatus(message, connected = false) {
+  console.info(`[Spendly:Drive] Status change: "${message}" (connected: ${connected})`);
   const statusBadge = document.getElementById('gdrive-status-badge');
   if (statusBadge) {
     statusBadge.textContent = message;
@@ -158,7 +195,7 @@ function setDriveStatus(message, connected = false) {
   // Update dynamic status chip in header/dashboard
   if (message.includes('Backed up') || message.includes('Restored') || message.includes('connected')) {
     updateStatusChip('synced', 'Drive Synced');
-  } else if (message.includes('paused') || message.includes('expired')) {
+  } else if (message.includes('paused') || message.includes('expired') || message.includes('offline')) {
     updateStatusChip('paused', 'Sync paused');
   } else if (message.includes('Checking') || message.includes('Restoring') || message.includes('backing up') || message.includes('Syncing')) {
     updateStatusChip('syncing', 'Syncing...');
@@ -172,59 +209,77 @@ function updateStatusChip(state, text) {
   if (!chip) return;
   chip.className = `status-chip ${state}`;
   chip.innerHTML = `<span class="status-dot"></span><span>${text}</span>`;
+  console.debug(`[Spendly:UI] Status chip updated -> state: "${state}", label: "${text}"`);
 }
 
 function signInWithGoogle() {
+  console.info('[Spendly:Auth] signInWithGoogle() called.');
   const clientId = getGoogleClientId();
   if (!clientId) {
+    console.error('[Spendly:Auth] Sign-in aborted: Google Client ID is not configured.');
     setDriveStatus('Google Drive sign-in is not available yet. You can continue locally.');
     return;
   }
   if (!window.google?.accounts?.oauth2) {
+    console.warn('[Spendly:Auth] Google Identity Services library not yet initialized on window.');
     setDriveStatus('Google sign-in is still loading. Try again in a moment.');
     return;
   }
-  driveTokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
-    scope: DRIVE_SCOPE,
-    callback: async response => {
-      if (response.error) {
-        setDriveStatus('Google sign-in was not completed.');
-        return;
-      }
-      driveAccessToken = response.access_token;
-      localStorage.setItem('spendly_drive_connected', 'true');
-      
-      try {
-        const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${driveAccessToken}` }
-        });
-        if (res.ok) {
-          const profile = await res.json();
-          S.userProfile = {
-            name: profile.name,
-            email: profile.email,
-            picture: profile.picture
-          };
-          localStorage.setItem('spendly_user_profile', JSON.stringify(S.userProfile));
+  try {
+    driveTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: DRIVE_SCOPE,
+      callback: async response => {
+        if (response.error) {
+          console.error('[Spendly:Auth] TokenClient authorization error response:', response.error, response);
+          setDriveStatus('Google sign-in was not completed.');
+          return;
         }
-      } catch (err) {
-        console.warn('Failed to fetch user profile', err);
-      }
+        console.info('[Spendly:Auth] Access token received successfully.');
+        driveAccessToken = response.access_token;
+        localStorage.setItem('spendly_drive_connected', 'true');
+        
+        try {
+          console.debug('[Spendly:Auth] Fetching Google user profile info...');
+          const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${driveAccessToken}` }
+          });
+          if (res.ok) {
+            const profile = await res.json();
+            console.info('[Spendly:Auth] User profile fetched:', profile.email, `(${profile.name})`);
+            S.userProfile = {
+              name: profile.name,
+              email: profile.email,
+              picture: profile.picture
+            };
+            localStorage.setItem('spendly_user_profile', JSON.stringify(S.userProfile));
+          } else {
+            console.warn('[Spendly:Auth] userinfo request returned non-OK status:', res.status, res.statusText);
+          }
+        } catch (err) {
+          console.warn('[Spendly:Auth] Network failure while fetching user profile:', err);
+        }
 
-      setDriveStatus('Google Drive connected', true);
-      enterWorkspace();
-      checkAndRestoreDriveBackup();
-    }
-  });
-  driveTokenClient.requestAccessToken({
-    prompt: localStorage.getItem('spendly_drive_connected') === 'true' ? '' : 'select_account'
-  });
+        setDriveStatus('Google Drive connected', true);
+        enterWorkspace();
+        checkAndRestoreDriveBackup();
+      }
+    });
+
+    const isConnected = localStorage.getItem('spendly_drive_connected') === 'true';
+    console.debug(`[Spendly:Auth] Requesting access token (prompt: "${isConnected ? 'silent' : 'select_account'}")...`);
+    driveTokenClient.requestAccessToken({
+      prompt: isConnected ? '' : 'select_account'
+    });
+  } catch (err) {
+    console.error('[Spendly:Auth] Unexpected exception during TokenClient initialization:', err);
+  }
 }
 
 function handleGoogleSignIn() {
   if (localStorage.getItem('spendly_drive_connected') === 'true') {
     if (confirm('Disconnect Google Drive? Local data remains, but background backups will pause.')) {
+      console.info('[Spendly:Auth] User disconnected Google Drive.');
       driveAccessToken = '';
       localStorage.removeItem('spendly_drive_connected');
       localStorage.removeItem('spendly_user_profile');
@@ -239,7 +294,9 @@ function handleGoogleSignIn() {
 }
 
 async function syncDriveBackup(isBackground = false) {
+  console.info(`[Spendly:Drive] Initiating backup sync (background: ${isBackground}). Transactions: ${S.transactions.length}, Accounts: ${S.accounts.length}`);
   if (!driveAccessToken) {
+    console.warn('[Spendly:Drive] syncDriveBackup aborted: No OAuth access token present.');
     if (!isBackground) {
       setDriveStatus('Connect Google Drive before backing up.');
     }
@@ -248,47 +305,55 @@ async function syncDriveBackup(isBackground = false) {
   const payload = JSON.stringify({ transactions: S.transactions, accounts: S.accounts, budgets: S.budgets, loans: S.loans });
   const headers = { Authorization: `Bearer ${driveAccessToken}`, 'Content-Type': 'application/json' };
   try {
+    console.debug('[Spendly:Drive] Querying Drive API for existing spendly_db.json in appDataFolder...');
     const search = await fetch('https://www.googleapis.com/drive/v3/files?q=name%3D%27spendly_db.json%27%20and%20%27appDataFolder%27%20in%20parents&spaces=appDataFolder&fields=files(id)', { headers });
     if (!search.ok) {
+      console.error('[Spendly:Drive] Drive file search HTTP error:', search.status, search.statusText);
       if (search.status === 401) {
         setDriveStatus('Sync paused (reconnect Drive)', false);
         return;
       }
-      throw new Error('Drive lookup failed');
+      throw new Error(`Drive lookup failed with status ${search.status}`);
     }
     const matches = await search.json();
     const fileId = matches.files?.[0]?.id;
     const body = new Blob([payload], { type: 'application/json' });
     let response;
     if (fileId) {
+      console.info(`[Spendly:Drive] Found existing backup file ID: "${fileId}". Uploading payload (${payload.length} bytes)...`);
       response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, { method: 'PATCH', headers, body });
     } else {
+      console.info('[Spendly:Drive] No existing backup file found. Creating metadata entry in appDataFolder...');
       const metadata = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
         method: 'POST', headers, body: JSON.stringify({ name: 'spendly_db.json', parents: ['appDataFolder'], mimeType: 'application/json' })
       });
       if (!metadata.ok) {
+        console.error('[Spendly:Drive] Drive file metadata creation HTTP error:', metadata.status, metadata.statusText);
         if (metadata.status === 401) {
           setDriveStatus('Sync paused (reconnect Drive)', false);
           return;
         }
-        throw new Error('Drive file creation failed');
+        throw new Error(`Drive file creation failed with status ${metadata.status}`);
       }
       const created = await metadata.json();
+      console.info(`[Spendly:Drive] Created new backup file ID: "${created.id}". Uploading media payload...`);
       response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${created.id}?uploadType=media`, { method: 'PATCH', headers, body });
     }
     if (!response.ok) {
+      console.error('[Spendly:Drive] Media upload HTTP error:', response.status, response.statusText);
       if (response.status === 401) {
         setDriveStatus('Sync paused (reconnect Drive)', false);
         return;
       }
-      throw new Error('Drive backup failed');
+      throw new Error(`Drive backup upload failed with status ${response.status}`);
     }
+    console.info('[Spendly:Drive] Cloud backup successfully written to Google Drive.');
     setDriveStatus('Backed up just now', true);
     if (!isBackground) {
       showToast('Workspace backed up to Google Drive', 'ok');
     }
   } catch (error) {
-    console.error(error);
+    console.error('[Spendly:Drive] Exception encountered during syncDriveBackup:', error);
     if (!isBackground) {
       setDriveStatus('Drive backup could not be completed.');
       showToast('Drive backup failed', 'err');
@@ -299,53 +364,74 @@ async function syncDriveBackup(isBackground = false) {
 }
 
 async function checkAndRestoreDriveBackup() {
-  if (!driveAccessToken) return;
+  if (!driveAccessToken) {
+    console.warn('[Spendly:Drive] checkAndRestoreDriveBackup aborted: No access token.');
+    return;
+  }
+  console.info('[Spendly:Drive] Checking cloud backup file status...');
   setDriveStatus('Checking cloud backup...', true);
   updateStatusChip('syncing', 'Checking...');
   
   const headers = { Authorization: `Bearer ${driveAccessToken}` };
   try {
     const search = await fetch('https://www.googleapis.com/drive/v3/files?q=name%3D%27spendly_db.json%27%20and%20%27appDataFolder%27%20in%20parents&spaces=appDataFolder&fields=files(id)', { headers });
-    if (!search.ok) throw new Error('Drive search failed');
+    if (!search.ok) {
+      console.error('[Spendly:Drive] Search error during backup check:', search.status);
+      throw new Error('Drive search failed');
+    }
     const matches = await search.json();
     const fileId = matches.files?.[0]?.id;
     if (!fileId) {
-      // No existing backup, perform initial upload
+      console.info('[Spendly:Drive] No pre-existing backup file in Drive. Performing initial upload of local state.');
       setDriveStatus('Google Drive connected', true);
       updateStatusChip('synced', 'Drive Synced');
       syncDriveBackup(true);
       return;
     }
     
-    // Download backup
+    console.info(`[Spendly:Drive] Found cloud file "${fileId}". Downloading content...`);
     const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers });
-    if (!response.ok) throw new Error('Download failed');
+    if (!response.ok) {
+      console.error('[Spendly:Drive] Failed to download cloud file media:', response.status);
+      throw new Error('Download failed');
+    }
     const rawText = await response.text();
     let backupData;
     try {
       backupData = JSON.parse(rawText);
     } catch (e) {
-      console.warn('Corrupt backup file on Drive', e);
+      console.error('[Spendly:Drive] Failed to parse cloud backup JSON:', e);
       setDriveStatus('Connected (corrupt cloud file)', true);
       updateStatusChip('paused', 'Corrupt backup');
       return;
     }
     if (!backupData || !Array.isArray(backupData.transactions)) {
+      console.error('[Spendly:Drive] Cloud backup missing required "transactions" array:', backupData);
       setDriveStatus('Connected (invalid cloud format)', true);
       updateStatusChip('paused', 'Invalid format');
       return;
     }
 
+    console.info('[Spendly:Drive] Cloud backup successfully loaded and validated:', {
+      txns: backupData.transactions.length,
+      accounts: backupData.accounts?.length || 0,
+      budgets: Object.keys(backupData.budgets || {}).length,
+      loans: backupData.loans?.length || 0
+    });
+
     const localEmpty = S.transactions.length === 0 && S.loans.length === 0 && Object.keys(S.budgets).length === 0;
     let shouldRestore = false;
     
     if (localEmpty) {
+      console.info('[Spendly:Drive] Local cache is empty. Automatically restoring cloud backup.');
       shouldRestore = true;
     } else {
+      console.info('[Spendly:Drive] Local cache has existing entries. Prompting user for cloud overwrite preference.');
       shouldRestore = confirm('Found existing cloud backup on Google Drive. Restore cloud version and overwrite local entries, or keep current local entries?');
     }
 
     if (shouldRestore) {
+      console.info('[Spendly:Drive] Overwriting local state with cloud backup data.');
       S.transactions = backupData.transactions || [];
       S.accounts = backupData.accounts || ['Savings', 'Credit Card', 'Cash'];
       S.budgets = backupData.budgets || {};
@@ -358,58 +444,65 @@ async function checkAndRestoreDriveBackup() {
       updateStatusChip('synced', 'Drive Synced');
       showToast('Backup restored successfully', 'ok');
     } else {
-      // Keep current local entries and sync them to Drive
+      console.info('[Spendly:Drive] Keeping local state. Syncing local entries up to cloud.');
       setDriveStatus('Google Drive connected', true);
       updateStatusChip('synced', 'Drive Synced');
       syncDriveBackup(true);
     }
   } catch (error) {
-    console.error(error);
+    console.error('[Spendly:Drive] Error during checkAndRestoreDriveBackup:', error);
     setDriveStatus('Failed to check backup.');
     updateStatusChip('paused', 'Sync paused');
   }
 }
 
 async function restoreDriveBackup() {
+  console.info('[Spendly:Drive] restoreDriveBackup() triggered by user action.');
   if (!driveAccessToken) {
+    console.warn('[Spendly:Drive] Manual restore aborted: No access token.');
     setDriveStatus('Connect Google Drive before restoring.');
     showToast('Connect Google Drive first', 'err');
     return;
   }
   if (!confirm('This will replace your local workspace with the backup in Google Drive. Proceed?')) {
+    console.debug('[Spendly:Drive] Manual restore cancelled by user prompt.');
     return;
   }
   setDriveStatus('Restoring from Google Drive...');
   const headers = { Authorization: `Bearer ${driveAccessToken}` };
   try {
     const search = await fetch('https://www.googleapis.com/drive/v3/files?q=name%3D%27spendly_db.json%27%20and%20%27appDataFolder%27%20in%20parents&spaces=appDataFolder&fields=files(id)', { headers });
-    if (!search.ok) throw new Error('Drive search failed');
+    if (!search.ok) throw new Error(`Drive search failed with status ${search.status}`);
     const matches = await search.json();
     const fileId = matches.files?.[0]?.id;
     if (!fileId) {
+      console.warn('[Spendly:Drive] No backup file found in appDataFolder.');
       setDriveStatus('No backup file found in Google Drive.', true);
       showToast('No backup found', 'err');
       return;
     }
+    console.info(`[Spendly:Drive] Downloading file "${fileId}" for manual restoration...`);
     const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers });
-    if (!response.ok) throw new Error('Download failed');
+    if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
     
     const rawText = await response.text();
     let backupData;
     try {
       backupData = JSON.parse(rawText);
     } catch (e) {
+      console.error('[Spendly:Drive] Corrupt JSON in cloud backup file:', e);
       setDriveStatus('Corrupt backup file on Drive.', true);
       showToast('Corrupt backup file on Drive', 'err');
       return;
     }
     if (!backupData || !Array.isArray(backupData.transactions)) {
+      console.error('[Spendly:Drive] Invalid backup structure:', backupData);
       setDriveStatus('Invalid backup format on Drive.', true);
       showToast('Invalid backup format', 'err');
       return;
     }
 
-    // Restore S state
+    console.info('[Spendly:Drive] Manual restore applying data to S state.');
     S.transactions = backupData.transactions || [];
     S.accounts = backupData.accounts || ['Savings', 'Credit Card', 'Cash'];
     S.budgets = backupData.budgets || {};
@@ -422,15 +515,17 @@ async function restoreDriveBackup() {
     setDriveStatus('Restored just now', true);
     showToast('Backup restored successfully', 'ok');
   } catch (error) {
-    console.error(error);
+    console.error('[Spendly:Drive] Manual restore failed:', error);
     setDriveStatus('Drive restore could not be completed.');
     showToast('Drive restore failed', 'err');
   }
 }
 
 function enterWorkspace() {
+  console.info('[Spendly:Navigation] enterWorkspace() called.');
   localStorage.setItem('spendly_workspace_entered', 'true');
   if (!window.location.pathname.endsWith('/workspace.html')) {
+    console.debug('[Spendly:Navigation] Redirecting to workspace.html');
     window.location.href = 'workspace.html';
     return;
   }
@@ -450,12 +545,17 @@ function showWelcomeDetails() {
    UI Navigation & Sliding Segment Controls
    -------------------------------------------------------------------------- */
 function switchView(viewId) {
+  console.info(`[Spendly:Navigation] Switching active view to: "${viewId}"`);
   S.activeView = viewId;
   document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
   const target = document.getElementById(`view-${viewId}`);
-  if (target) target.classList.add('active');
+  if (target) {
+    target.classList.add('active');
+  } else {
+    console.warn(`[Spendly:Navigation] Target view element "#view-${viewId}" not found in DOM.`);
+  }
 
   const navIdx = ['dashboard', 'itr', 'loans', 'profile'].indexOf(viewId);
   const navItems = document.querySelectorAll('.nav-item');
@@ -485,31 +585,42 @@ function setupSegmentGliders() {
 }
 
 function setTxnType(type) {
+  console.debug(`[Spendly:UI] Selected transaction entry type: "${type}"`);
   S.currentType = type;
   const ctrl = document.getElementById('txn-type-glider-bar');
-  ctrl.querySelectorAll('.segment-btn').forEach(btn => {
-    const isActive = btn.dataset.type === type;
-    btn.classList.toggle('active', isActive);
-    if (isActive) updateSegmentGlider(ctrl, btn);
-  });
+  if (ctrl) {
+    ctrl.querySelectorAll('.segment-btn').forEach(btn => {
+      const isActive = btn.dataset.type === type;
+      btn.classList.toggle('active', isActive);
+      if (isActive) updateSegmentGlider(ctrl, btn);
+    });
+  }
 
   const isTransfer = type === 'transfer';
-  document.getElementById('wrap-single-account').style.display = isTransfer ? 'none' : 'block';
-  document.getElementById('wrap-transfer-accounts').style.display = isTransfer ? 'grid' : 'none';
-  document.getElementById('wrap-category').style.display = isTransfer ? 'none' : 'block';
-  document.getElementById('wrap-tax-section').style.display = (type === 'expense' || type === 'investment') ? 'block' : 'none';
+  const singleAccWrap = document.getElementById('wrap-single-account');
+  const transferAccWrap = document.getElementById('wrap-transfer-accounts');
+  const catWrap = document.getElementById('wrap-category');
+  const taxSecWrap = document.getElementById('wrap-tax-section');
+
+  if (singleAccWrap) singleAccWrap.style.display = isTransfer ? 'none' : 'block';
+  if (transferAccWrap) transferAccWrap.style.display = isTransfer ? 'grid' : 'none';
+  if (catWrap) catWrap.style.display = isTransfer ? 'none' : 'block';
+  if (taxSecWrap) taxSecWrap.style.display = (type === 'expense' || type === 'investment') ? 'block' : 'none';
 
   populateCategoryDropdown(type);
 }
 
 function setTaxRegime(regime) {
+  console.info(`[Spendly:Tax] Switching tax calculation regime to: "${regime}"`);
   S.currentRegime = regime;
   const ctrl = document.getElementById('tax-regime-switcher');
-  ctrl.querySelectorAll('.segment-btn').forEach(btn => {
-    const isActive = btn.dataset.regime === regime;
-    btn.classList.toggle('active', isActive);
-    if (isActive) updateSegmentGlider(ctrl, btn);
-  });
+  if (ctrl) {
+    ctrl.querySelectorAll('.segment-btn').forEach(btn => {
+      const isActive = btn.dataset.regime === regime;
+      btn.classList.toggle('active', isActive);
+      if (isActive) updateSegmentGlider(ctrl, btn);
+    });
+  }
   calculateTaxCenter();
 }
 
@@ -543,11 +654,16 @@ function addNewAccount() {
   const input = document.getElementById('new-account-name');
   if (!input) return;
   const name = input.value.trim();
-  if (!name) return;
+  if (!name) {
+    console.warn('[Spendly:Accounts] Aborted account addition: Empty name provided.');
+    return;
+  }
   if (S.accounts.some(account => account.toLowerCase() === name.toLowerCase())) {
+    console.warn(`[Spendly:Accounts] Account "${name}" already exists in account list.`);
     showToast('That account already exists', 'err');
     return;
   }
+  console.info(`[Spendly:Accounts] Adding new account: "${name}".`);
   S.accounts.push(name);
   saveLocalCache();
   populateDropdowns();
@@ -559,10 +675,12 @@ function addNewAccount() {
 function removeAccount(encodedName) {
   const name = decodeURIComponent(encodedName);
   if (S.accounts.length <= 1) {
+    console.warn('[Spendly:Accounts] Cannot remove the only remaining account.');
     showToast('Keep at least one account', 'err');
     return;
   }
   if (!confirm(`Remove ${name} from your account list? Existing transactions stay unchanged.`)) return;
+  console.info(`[Spendly:Accounts] Removing account: "${name}".`);
   S.accounts = S.accounts.filter(account => account !== name);
   saveLocalCache();
   populateDropdowns();
@@ -612,6 +730,8 @@ function renderDashboard() {
     }
   });
 
+  console.debug(`[Spendly:Dashboard] Calculated balances (filter: "${filterAccount}") -> Total: ${fromPaise(totalBalPaise)}, Income: ${fromPaise(incPaise)}, Expense: ${fromPaise(expPaise)}`);
+
   const availBalEl = document.getElementById('hero-avail-bal');
   const incValEl = document.getElementById('hero-inc-val');
   const expValEl = document.getElementById('hero-exp-val');
@@ -645,6 +765,8 @@ function renderAccountBalances() {
     }
   });
 
+  console.debug('[Spendly:Dashboard] Account balances computed:', balances);
+
   container.innerHTML = S.accounts.map(acc => {
     const balPaise = balances[acc] || 0;
     const balance = fromPaise(balPaise);
@@ -669,6 +791,8 @@ function renderLedgerList(filterAccount) {
     if (filterAccount === 'ALL') return true;
     return t.account === filterAccount || t.fromAccount === filterAccount || t.toAccount === filterAccount;
   });
+
+  console.debug(`[Spendly:Dashboard] Rendering ledger: ${filtered.length} entries for current month (filter: "${filterAccount}").`);
 
   if (!filtered.length) {
     container.innerHTML = `<div class="empty-state">No transactions recorded this month.</div>`;
@@ -715,6 +839,8 @@ function renderBudgetGauges() {
       spendByCat[t.category] = (spendByCat[t.category] || 0) + toPaise(t.amount);
     }
   });
+
+  console.debug(`[Spendly:Dashboard] Rendered budget gauges for ${categories.length} categories.`);
 
   container.innerHTML = categories.map(cat => {
     const limitPaise = toPaise(S.budgets[cat]);
@@ -834,7 +960,9 @@ function calculateTax(taxableIncome, regime, fyYear) {
   }
 
   // 4% Health and Education Cess
-  return Math.round(tax + (tax * 0.04));
+  const finalTax = Math.round(tax + (tax * 0.04));
+  console.debug(`[Spendly:Tax] calculateTax(taxable: ${taxableIncome}, regime: "${regime}", fy: ${fyYear}) -> Basic Tax: ${tax}, Final (incl cess): ${finalTax}`);
+  return finalTax;
 }
 
 function calculateTaxCenter() {
@@ -881,6 +1009,8 @@ function calculateTaxCenter() {
   }
 
   const netTax = calculateTax(taxableNet, S.currentRegime, fyYear);
+
+  console.info(`[Spendly:Tax] Tax Center computed -> FY: ${fyYear}, Regime: "${S.currentRegime}", Gross: ${grossIncome}, Total Deductions: ${totalDeductions}, Taxable Net: ${taxableNet}, Tax: ${netTax}`);
 
   const grossIncomeEl = document.getElementById('tax-gross-income');
   const totalDeductionsEl = document.getElementById('tax-total-deductions');
@@ -937,10 +1067,14 @@ function payLoan(loanId, emiAmt, name, loanType) {
   name = decodeURIComponent(name);
   loanType = decodeURIComponent(loanType);
   const loan = S.loans.find(item => item.id === loanId);
-  if (!loan) return;
+  if (!loan) {
+    console.error(`[Spendly:Loans] Loan with ID "${loanId}" not found in state.`);
+    return;
+  }
   const paidMonths = Number(loan.paidMonths) || 0;
   const totalMonths = Number(loan.totalMonths) || 0;
   if (totalMonths > 0 && paidMonths >= totalMonths) {
+    console.warn(`[Spendly:Loans] Payment rejected: Loan "${name}" is already fully paid (${paidMonths}/${totalMonths}).`);
     showToast('This loan is already complete', 'err');
     return;
   }
@@ -959,6 +1093,7 @@ function payLoan(loanId, emiAmt, name, loanType) {
   };
 
   loan.paidMonths = paidMonths + 1;
+  console.info(`[Spendly:Loans] Recorded payment for loan "${name}". Paid months updated to ${loan.paidMonths}/${totalMonths}. Created transaction "${newTxn.id}".`);
   S.transactions.unshift(newTxn);
   saveLocalCache();
   renderDashboard();
@@ -972,9 +1107,14 @@ let pendingPhonePeTxns = [];
 
 function handlePhonePeFile(file) {
   if (!file) return;
+  console.info(`[Spendly:CSV] Processing PhonePe statement file: "${file.name}" (${(file.size / 1024).toFixed(1)} KB, type: "${file.type || 'text/csv'}")`);
   const reader = new FileReader();
   reader.onload = (e) => {
     parseAndDeduplicatePhonePeCSV(e.target.result);
+  };
+  reader.onerror = (err) => {
+    console.error('[Spendly:CSV] FileReader encountered an error while reading statement:', err);
+    showToast('Could not read statement file', 'err');
   };
   reader.readAsText(file);
 }
@@ -1032,7 +1172,9 @@ function normalizeAccountName(rawInstrument) {
 
 function parseAndDeduplicatePhonePeCSV(csvText) {
   const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+  console.info(`[Spendly:CSV] Parsing statement content: ${lines.length} lines detected.`);
   if (lines.length < 2) {
+    console.warn('[Spendly:CSV] Statement has insufficient lines (< 2).');
     showToast('Invalid CSV file', 'err');
     return;
   }
@@ -1055,6 +1197,8 @@ function parseAndDeduplicatePhonePeCSV(csvText) {
     }
   }
 
+  console.debug(`[Spendly:CSV] Discovered header row at line index ${headerRowIndex}.`);
+
   const headers = parseCSVLine(lines[headerRowIndex]).map(h => h.toLowerCase().replace(/["']/g, '').trim());
   const idxId = headers.findIndex(h => h.includes('transaction id') || h.includes('utr') || h.includes('txn id'));
   const idxDate = headers.findIndex(h => h.includes('date'));
@@ -1063,8 +1207,9 @@ function parseAndDeduplicatePhonePeCSV(csvText) {
   const idxAmt = headers.findIndex(h => h.includes('amount'));
   const idxInstrument = headers.findIndex(h => h.includes('instrument') || h.includes('bank') || h.includes('account') || h.includes('source') || h.includes('payment') || h.includes('card'));
 
+  console.debug('[Spendly:CSV] Mapped header column indices:', { idxId, idxDate, idxDesc, idxType, idxAmt, idxInstrument });
+
   for (let i = headerRowIndex + 1; i < lines.length; i++) {
-    // Robust regex parsing handles escaped commas inside quotes
     const row = parseCSVLine(lines[i]);
     if (row.length < 3) continue;
 
@@ -1102,6 +1247,8 @@ function parseAndDeduplicatePhonePeCSV(csvText) {
     });
   }
 
+  console.info(`[Spendly:CSV] Statement parsed: ${parsedNew.length} new transactions ready for import, ${skippedDuplicates} duplicate records skipped.`);
+
   pendingPhonePeTxns = parsedNew;
   document.getElementById('imp-total-rows').textContent = lines.length - 1;
   document.getElementById('imp-new-rows').textContent = parsedNew.length;
@@ -1121,19 +1268,27 @@ function categorizeMerchant(desc) {
 
 function executePhonePeImport() {
   if (!pendingPhonePeTxns.length) {
+    console.warn('[Spendly:CSV] executePhonePeImport called but pendingPhonePeTxns is empty.');
     closePhonePeModal();
     return;
   }
 
   // Auto-provision new accounts discovered in statements
+  const newlyAddedAccounts = [];
   pendingPhonePeTxns.forEach(t => {
     const accName = t.account;
     const match = S.accounts.find(acc => acc.toLowerCase() === accName.toLowerCase());
     if (!match) {
       S.accounts.push(accName);
+      newlyAddedAccounts.push(accName);
     }
   });
 
+  if (newlyAddedAccounts.length > 0) {
+    console.info('[Spendly:CSV] Auto-provisioned new bank accounts from statement:', newlyAddedAccounts);
+  }
+
+  console.info(`[Spendly:CSV] Executing import of ${pendingPhonePeTxns.length} transactions into database.`);
   S.transactions = [...pendingPhonePeTxns, ...S.transactions];
   saveLocalCache();
   populateDropdowns();
@@ -1142,10 +1297,11 @@ function executePhonePeImport() {
 
   pendingPhonePeTxns = [];
   closePhonePeModal();
+  showToast('Statement imported successfully', 'ok');
 }
 
 function closePhonePeModal() {
-  document.getElementById('modal-phonepe-summary').classList.remove('active');
+  document.getElementById('modal-phonepe-summary')?.classList.remove('active');
 }
 
 /* --------------------------------------------------------------------------
@@ -1174,7 +1330,10 @@ function closeLoanModal() {
 function submitTxnForm(e) {
   e.preventDefault();
   const amt = parseFloat(document.getElementById('txn-amount').value);
-  if (!amt) return;
+  if (!amt) {
+    console.warn('[Spendly:Ledger] Aborted transaction submission: Invalid or zero amount.');
+    return;
+  }
 
   const isTransfer = S.currentType === 'transfer';
   const newTxn = {
@@ -1190,6 +1349,7 @@ function submitTxnForm(e) {
     newTxn.fromAccount = document.getElementById('txn-from-account').value;
     newTxn.toAccount = document.getElementById('txn-to-account').value;
     if (newTxn.fromAccount === newTxn.toAccount) {
+      console.warn(`[Spendly:Ledger] Transfer validation failed: Source and destination accounts are both "${newTxn.fromAccount}".`);
       showToast('Source and destination accounts must differ', 'err');
       return;
     }
@@ -1198,6 +1358,7 @@ function submitTxnForm(e) {
     newTxn.category = document.getElementById('txn-category').value;
   }
 
+  console.info(`[Spendly:Ledger] Creating new transaction "${newTxn.id}":`, newTxn);
   S.transactions.unshift(newTxn);
   saveLocalCache();
   renderDashboard();
@@ -1208,13 +1369,16 @@ function submitTxnForm(e) {
 function deleteTransaction(id) {
   id = decodeURIComponent(id);
   const transaction = S.transactions.find(item => item.id === id);
+  if (!transaction) {
+    console.warn(`[Spendly:Ledger] Attempted to delete non-existent transaction ID "${id}".`);
+    return;
+  }
+  console.info(`[Spendly:Ledger] Deleting transaction "${id}" (${transaction.description || transaction.category}, amount: ${transaction.amount}).`);
   S.transactions = S.transactions.filter(t => t.id !== id);
   saveLocalCache();
   renderDashboard();
   showToast('Transaction removed', 'ok');
 }
-
-
 
 /* --------------------------------------------------------------------------
    Utilities
@@ -1222,18 +1386,22 @@ function deleteTransaction(id) {
 let driveSyncTimeout = null;
 function debouncedDriveSync() {
   if (!driveAccessToken) {
+    console.debug('[Spendly:Drive] Debounced sync skipped: Not connected to Google Drive.');
     updateStatusChip('offline', 'Local-first');
     return;
   }
   
+  console.debug('[Spendly:Drive] Scheduling debounced background sync in 2000ms...');
   updateStatusChip('syncing', 'Syncing...');
   clearTimeout(driveSyncTimeout);
   
   driveSyncTimeout = setTimeout(async () => {
     try {
+      console.debug('[Spendly:Drive] Executing debounced background sync now.');
       await syncWithGoogleDrive(false); // Silent background sync
       updateStatusChip('synced', 'Drive Synced');
     } catch (err) {
+      console.error('[Spendly:Drive] Error during debounced background sync:', err);
       updateStatusChip('paused', 'Sync paused');
     }
   }, 2000);
@@ -1244,10 +1412,16 @@ async function syncWithGoogleDrive(showFeedback = false) {
 }
 
 function saveLocalCache() {
-  localStorage.setItem(CACHE_KEY_TXNS, JSON.stringify(S.transactions));
-  localStorage.setItem(CACHE_KEY_ACCOUNTS, JSON.stringify(S.accounts));
-  localStorage.setItem(CACHE_KEY_BUDGETS, JSON.stringify(S.budgets));
-  localStorage.setItem(CACHE_KEY_LOANS, JSON.stringify(S.loans));
+  console.debug(`[Spendly:Cache] Saving state to localStorage (txns: ${S.transactions.length}, accounts: ${S.accounts.length}, budgets: ${Object.keys(S.budgets).length}, loans: ${S.loans.length})`);
+  try {
+    localStorage.setItem(CACHE_KEY_TXNS, JSON.stringify(S.transactions));
+    localStorage.setItem(CACHE_KEY_ACCOUNTS, JSON.stringify(S.accounts));
+    localStorage.setItem(CACHE_KEY_BUDGETS, JSON.stringify(S.budgets));
+    localStorage.setItem(CACHE_KEY_LOANS, JSON.stringify(S.loans));
+  } catch (err) {
+    console.error('[Spendly:Cache] Failed to save state to localStorage (storage quota exceeded?):', err);
+    showToast('Local storage full / error saving', 'err');
+  }
   debouncedDriveSync();
 }
 
@@ -1262,10 +1436,12 @@ function showToast(msg, type = 'ok') {
 function initTheme() {
   const isLight = localStorage.getItem('sp_theme') === 'light';
   document.body.classList.toggle('light-mode', isLight);
+  console.debug(`[Spendly:UI] Theme initialized. Light mode: ${isLight}`);
   document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const light = document.body.classList.toggle('light-mode');
       localStorage.setItem('sp_theme', light ? 'light' : 'dark');
+      console.debug(`[Spendly:UI] Theme toggled to: ${light ? 'light' : 'dark'}`);
     });
   });
 }
@@ -1274,6 +1450,7 @@ function resetWorkspace() {
   if (!confirm('WARNING: This will permanently wipe all your transactions, budgets, accounts, and loans from this device. Are you sure?')) {
     return;
   }
+  console.warn('[Spendly:System] resetWorkspace() confirmed. Wiping localStorage and reloading page.');
   localStorage.clear();
   window.location.reload();
 }
@@ -1302,8 +1479,6 @@ function hashString(str) {
   return hash;
 }
 
-
-
 function openBudgetModal(category = '') {
   const modal = document.getElementById('modal-budget');
   const categorySelect = document.getElementById('budget-category');
@@ -1324,10 +1499,12 @@ function submitBudgetForm(event) {
   const category = document.getElementById('budget-category').value;
   const limit = Number(document.getElementById('budget-limit').value);
   if (!Number.isFinite(limit) || limit <= 0) {
+    console.warn(`[Spendly:Budgets] Invalid budget limit "${limit}" entered for category "${category}".`);
     showToast('Enter a limit greater than zero', 'err');
     document.getElementById('budget-limit').focus();
     return;
   }
+  console.info(`[Spendly:Budgets] Saved budget limit for "${category}": ${limit}`);
   S.budgets[category] = limit;
   saveLocalCache();
   renderDashboard();
@@ -1343,6 +1520,11 @@ function submitLoanForm(e) {
   const tenure = parseInt(document.getElementById('loan-tenure').value);
   const type = document.getElementById('loan-type-select').value;
 
+  if (!name || isNaN(total) || isNaN(emi) || isNaN(tenure)) {
+    console.warn('[Spendly:Loans] Aborted loan submission: Missing or invalid loan fields.');
+    return;
+  }
+
   const newLoan = {
     id: 'loan_' + Date.now().toString(36),
     name: name,
@@ -1353,6 +1535,7 @@ function submitLoanForm(e) {
     loanType: type
   };
 
+  console.info(`[Spendly:Loans] Created new loan "${newLoan.id}":`, newLoan);
   S.loans.push(newLoan);
   saveLocalCache();
   renderLoans();
@@ -1401,7 +1584,8 @@ function normalizeDate(dStr) {
     }
     const d = new Date(clean);
     return !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-  } catch {
+  } catch (err) {
+    console.warn(`[Spendly:Date] Exception parsing date "${dStr}", defaulting to today:`, err);
     return new Date().toISOString().split('T')[0];
   }
 }
@@ -1409,3 +1593,4 @@ function normalizeDate(dStr) {
 function escapeHtml(str) {
   return (str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]);
 }
+

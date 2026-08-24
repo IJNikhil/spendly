@@ -14,19 +14,38 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
+  console.info('[Spendly:SW] Installing service worker, caching core assets:', ASSETS);
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.info('[Spendly:SW] Cache opened successfully:', CACHE_NAME);
+        return cache.addAll(ASSETS);
+      })
+      .then(() => {
+        console.info('[Spendly:SW] All core assets cached successfully.');
+      })
+      .catch((err) => {
+        console.error('[Spendly:SW] Asset caching failed during install:', err);
+      })
   );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
+  console.info('[Spendly:SW] Activating service worker. Purging stale caches...');
   e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+        keys.filter((k) => k !== CACHE_NAME).map((k) => {
+          console.info('[Spendly:SW] Deleting stale cache:', k);
+          return caches.delete(k);
+        })
       )
-    )
+    ).then(() => {
+      console.info('[Spendly:SW] Cache cleanup complete. Current cache:', CACHE_NAME);
+    }).catch((err) => {
+      console.error('[Spendly:SW] Error during cache cleanup:', err);
+    })
   );
   self.clients.claim();
 });
@@ -34,6 +53,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   // Bypass caching for non-GET requests (e.g. Google Auth POSTs)
   if (e.request.method !== 'GET') {
+    console.debug('[Spendly:SW] Bypassing non-GET request:', e.request.method, e.request.url);
     e.respondWith(fetch(e.request));
     return;
   }
@@ -42,6 +62,7 @@ self.addEventListener('fetch', (e) => {
 
   // Bypass caching for external Google API calls completely to ensure real-time auth
   if (url.origin.includes('google') || url.origin.includes('googleapis')) {
+    console.debug('[Spendly:SW] Bypassing external Google API call:', e.request.url);
     e.respondWith(fetch(e.request));
     return;
   }
@@ -51,12 +72,19 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       fetch(e.request)
         .then((response) => {
-          // Cache the latest page version
+          console.debug('[Spendly:SW] Navigation fetched from network, updating cache:', e.request.url);
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
           return response;
         })
-        .catch(() => caches.match(e.request)) // Fallback to offline cache
+        .catch((err) => {
+          console.warn('[Spendly:SW] Network navigation failed, falling back to cache:', e.request.url, err);
+          return caches.match(e.request).then((cached) => {
+            if (cached) return cached;
+            console.error('[Spendly:SW] No cached fallback available for navigation:', e.request.url);
+            return caches.match('./index.html') || caches.match('index.html');
+          });
+        })
     );
     return;
   }
@@ -66,15 +94,23 @@ self.addEventListener('fetch', (e) => {
     caches.match(e.request).then((cachedResponse) => {
       const fetchPromise = fetch(e.request)
         .then((networkResponse) => {
-          if (networkResponse.status === 200) {
+          if (networkResponse && networkResponse.status === 200) {
+            console.debug('[Spendly:SW] Revalidated asset from network:', e.request.url);
             const clone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
           }
           return networkResponse;
         })
-        .catch(() => {}); // Silent catch network errors
+        .catch((err) => {
+          console.debug('[Spendly:SW] Asset network fetch failed (offline mode):', e.request.url, err);
+        });
 
-      return cachedResponse || fetchPromise;
+      if (cachedResponse) {
+        console.debug('[Spendly:SW] Serving asset from cache:', e.request.url);
+        return cachedResponse;
+      }
+      console.debug('[Spendly:SW] Asset not in cache, fetching from network:', e.request.url);
+      return fetchPromise;
     })
   );
 });

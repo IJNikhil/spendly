@@ -475,7 +475,9 @@
   <script src="js/app.js?v=3.2.0"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js?v=3.2.0').catch(console.error);
+      navigator.serviceWorker.register('sw.js?v=3.2.0')
+        .then(reg => console.info('[Spendly:PWA] Service Worker registered successfully with scope:', reg.scope))
+        .catch(err => console.error('[Spendly:PWA] Service Worker registration failed:', err));
     }
   </script>
 </body>
