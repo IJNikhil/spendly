@@ -5,9 +5,17 @@
 
 // Global Exception & Unhandled Rejection Listeners
 window.addEventListener('error', (e) => {
+  const msg = e.message || '';
+  if (msg.includes('ResizeObserver') || msg.includes('chrome-extension://') || msg.includes('moz-extension://')) {
+    return; // Ignore benign browser/extension noise
+  }
   console.error('[Spendly:GlobalError] Uncaught window error:', e.message, 'at', `${e.filename}:${e.lineno}:${e.colno}`, e.error);
 });
 window.addEventListener('unhandledrejection', (e) => {
+  const reason = e.reason ? (e.reason.message || String(e.reason)) : '';
+  if (reason.includes('message channel closed') || reason.includes('ResizeObserver') || reason.includes('chrome-extension://')) {
+    return; // Ignore browser extension background messaging disconnects
+  }
   console.error('[Spendly:GlobalError] Unhandled Promise Rejection:', e.reason);
 });
 
