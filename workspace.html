@@ -18,9 +18,16 @@
         <h1>Spendly</h1>
       </div>
       <div class="header-actions">
-        <button id="theme-toggle-header" class="icon-btn theme-toggle-btn" aria-label="Toggle Theme">
-          <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          <svg class="moon-icon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <button id="theme-toggle-header" class="icon-btn theme-toggle-btn" aria-label="Toggle Theme" title="Toggle Theme">
+          <svg class="sun-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg class="moon-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <button id="btn-header-logout" class="icon-btn" aria-label="Sign Out" onclick="logoutUser()" title="Sign Out">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
         </button>
       </div>
     </header>
@@ -28,125 +35,139 @@
     <!-- Main Views Container -->
     <main id="main-viewport">
       <!-- VIEW: Dashboard -->
-      <section id="view-dashboard" class="app-view active" aria-labelledby="dashboard-title">
+      <section id="view-dashboard" class="app-view active" aria-labelledby="dash-hero-title">
         <div class="view-heading">
           <div>
             <span class="eyebrow">MONEY OVERVIEW</span>
-            <h2 id="dashboard-title">Your financial cockpit</h2>
-            <p>Know what is available, what is committed, and what comes next.</p>
+            <h2 id="dash-hero-title">Financial Cockpit</h2>
+            <p>Real-time cash flow and double-entry liquidity tracker.</p>
           </div>
-          <span id="global-status-chip" class="status-chip offline"><span class="status-dot"></span><span>Local-first</span></span>
+          <div id="global-status-chip" class="status-chip offline"><span class="status-dot"></span><span>Local-first</span></div>
         </div>
-        <!-- Floating Hero Balance Unit -->
+
+        <!-- Hero Balance Card -->
         <div class="hero-card">
-          <div class="hero-meta">Total Available Balance</div>
-          <div class="hero-balance" id="hero-avail-bal">₹ 0.00</div>
-          <div class="hero-split">
-            <div class="hero-split-item income">
-              <span class="split-dot"></span>
-              <span class="split-label">Income</span>
-              <span class="split-val" id="hero-inc-val">+₹0.00</span>
+          <span class="hero-label">Available Balance</span>
+          <div class="hero-value" id="hero-avail-bal">₹ 0.00</div>
+          <div class="hero-stats">
+            <div class="hero-stat-item">
+              <span class="stat-lbl">Income</span>
+              <strong id="hero-inc-val" class="text-income">+₹0.00</strong>
             </div>
-            <div class="hero-split-divider"></div>
-            <div class="hero-split-item expense">
-              <span class="split-dot"></span>
-              <span class="split-label">Expense</span>
-              <span class="split-val" id="hero-exp-val">-₹0.00</span>
+            <div class="hero-stat-item">
+              <span class="stat-lbl">Expense</span>
+              <strong id="hero-exp-val" class="text-expense">-₹0.00</strong>
             </div>
           </div>
         </div>
 
-        <!-- Account Filter & Quick Actions -->
-        <div class="section-toolbar">
-          <div class="select-wrapper">
-            <select id="dash-account-filter" onchange="renderDashboard()">
-              <option value="ALL">All Accounts</option>
-            </select>
-            <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+        <!-- Account Balances Manager & Filter -->
+        <div class="dashboard-account-controls">
+          <div class="input-well filter-well">
+            <label for="dash-account-filter">Filtered Account View</label>
+            <div class="select-wrapper">
+              <select id="dash-account-filter" onchange="renderDashboard()">
+                <option value="ALL">All Accounts</option>
+              </select>
+              <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
           </div>
-          <button id="btn-quick-add" class="btn-primary" onclick="openTxnModal()">
-            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add Record
-          </button>
         </div>
 
         <!-- Account Balances Card -->
-        <div class="content-card">
+        <div class="content-card" style="margin-bottom: 18px;">
           <div class="card-header">
             <h3>Account Balances</h3>
           </div>
-          <div id="dashboard-balances-list" class="account-balances-list">
-            <!-- Dynamic account balances rendered here -->
+          <div id="dashboard-balances-list" class="account-balances-grid">
+            <!-- Rendered in real-time -->
           </div>
         </div>
 
-        <!-- Monthly Budgets Card -->
-        <div class="content-card">
+        <!-- Monthly Category Budgets Tracker -->
+        <div class="content-card" style="margin-bottom: 18px;">
           <div class="card-header">
-            <h3>Monthly Category Budgets</h3>
-            <button class="btn-text" onclick="openBudgetModal()">Set Limits</button>
+            <h3>Category Budgets</h3>
+            <button class="btn-primary mini" onclick="openBudgetModal()">+ Set Limit</button>
           </div>
-          <div id="budget-gauges-list" class="budget-list">
+          <div id="budget-gauges-list" class="budget-gauges-grid">
             <div class="empty-state">No category limits configured.</div>
           </div>
         </div>
 
-        <!-- Recent Transactions -->
+        <!-- Real-Time Monthly Transaction Ledger -->
         <div class="content-card">
           <div class="card-header">
             <h3>Recent Ledger</h3>
-            <span class="swipe-hint">Swipe left to delete</span>
+            <button class="btn-primary mini" onclick="openTxnModal()">+ New Entry</button>
           </div>
-          <div id="dashboard-txns-list" class="txn-stream">
+          <div id="dashboard-txns-list" class="txns-list">
             <div class="empty-state">No transactions recorded this month.</div>
           </div>
         </div>
       </section>
 
-      <!-- VIEW: Tax Center (ITR) -->
-      <section id="view-itr" class="app-view" aria-labelledby="itr-title">
-        <div class="view-heading compact-heading"><div><span class="eyebrow">TAX CENTER</span><h2 id="itr-title">Plan before you file.</h2><p>Compare regimes using your recorded income and deductions.</p></div></div>
+      <!-- VIEW: Tax & ITR Optimizer -->
+      <section id="view-itr" class="app-view" aria-labelledby="tax-title">
+        <div class="view-heading compact-heading">
+          <div>
+            <span class="eyebrow">STATUTORY CA OPTIMIZER</span>
+            <h2 id="tax-title">Tax Center</h2>
+            <p>Indian Income Tax Act (Budget 2025 Slabs & Relief Formulae).</p>
+          </div>
+        </div>
+
+        <!-- Regime Selector & Controls -->
+        <div class="segmented-control" id="tax-regime-switcher">
+          <div class="segment-glider"></div>
+          <button type="button" class="segment-btn active" data-regime="new" onclick="setTaxRegime('new')">New Regime (Default)</button>
+          <button type="button" class="segment-btn" data-regime="old" onclick="setTaxRegime('old')">Old Regime</button>
+        </div>
+
+        <div class="content-card" style="margin-top: 14px;">
+          <div class="tax-controls-grid">
+            <div class="input-well">
+              <label for="itr-fy-select">Assessment Financial Year</label>
+              <div class="select-wrapper">
+                <select id="itr-fy-select" onchange="calculateTaxCenter()">
+                  <option value="2027">FY 2026-27 (AY 2027-28)</option>
+                  <option value="2026" selected>FY 2025-26 (AY 2026-27)</option>
+                  <option value="2025">FY 2024-25 (AY 2025-26)</option>
+                </select>
+                <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+
+            <div class="checkbox-row" style="margin-top: 10px;">
+              <label class="custom-checkbox">
+                <input type="checkbox" id="itr-senior-parent" onchange="calculateTaxCenter()">
+                <span class="checkbox-box"></span>
+                <span>Parents are Senior Citizens (Sec 80D limit up to ₹50k)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="tax-summary-panel">
+            <div class="tax-summary-row">
+              <span>Gross Income</span>
+              <strong id="tax-gross-income">₹ 0.00</strong>
+            </div>
+            <div class="tax-summary-row">
+              <span>Total Deductions & Exemptions</span>
+              <strong id="tax-total-deductions" class="text-income">₹ 0.00</strong>
+            </div>
+            <div class="tax-summary-row highlight">
+              <span>Estimated Tax Liability</span>
+              <strong id="tax-net-liability" class="text-expense">₹ 0.00</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deductions Utilization -->
         <div class="content-card">
           <div class="card-header">
-            <h3>Indian Income Tax Optimizer</h3>
-            <div class="select-wrapper mini">
-              <select id="itr-fy-select" onchange="calculateTaxCenter()">
-                <option value="2026" selected>FY 2025–26 (Budget 2025)</option>
-                <option value="2025">FY 2024–25 (Legacy)</option>
-              </select>
-              <svg class="chevron" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
+            <h3>Deduction Utilization</h3>
           </div>
-
-          <div class="segmented-control" id="tax-regime-switcher">
-            <div class="segment-glider"></div>
-            <button type="button" class="segment-btn active" data-regime="new" onclick="setTaxRegime('new')">New Regime</button>
-            <button type="button" class="segment-btn" data-regime="old" onclick="setTaxRegime('old')">Old Regime</button>
-          </div>
-
-          <div class="tax-comparison-grid">
-            <div class="tax-stat-box">
-              <span class="stat-label">Taxable Gross</span>
-              <span class="stat-value" id="tax-gross-income">₹0</span>
-            </div>
-            <div class="tax-stat-box">
-              <span class="stat-label">Total Deductions</span>
-              <span class="stat-value" id="tax-total-deductions">₹0</span>
-            </div>
-            <div class="tax-stat-box highlight">
-              <span class="stat-label">Net Payable Tax</span>
-              <span class="stat-value" id="tax-net-liability">₹0</span>
-            </div>
-          </div>
-
-          <div class="tax-options-bar">
-            <label class="checkbox-container">
-              <input type="checkbox" id="itr-senior-parent" onchange="calculateTaxCenter()">
-              <span class="checkmark"></span>
-              Include Senior Citizen Parents (Section 80D up to ₹50,000)
-            </label>
-          </div>
-
           <div id="itr-deductions-breakdown" class="deductions-list"></div>
         </div>
       </section>
@@ -191,8 +212,9 @@
             </div>
           </div>
           
-          <div class="card-footer-actions">
+          <div class="card-footer-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
             <button id="btn-gdrive-toggle" class="btn-primary" onclick="handleGoogleSignIn()">Connect Google Drive</button>
+            <button id="btn-gdrive-logout" class="btn-secondary" onclick="logoutUser()">Sign Out</button>
           </div>
         </div>
 
@@ -223,7 +245,7 @@
           </div>
         </div>
 
-        <!-- 4. Preferences & Danger Zone -->
+        <!-- 4. Preferences & Data Controls -->
         <div class="content-card">
           <div class="card-header">
             <h3>Preferences & Data Controls</h3>
@@ -234,6 +256,18 @@
               <p class="card-desc" style="margin-bottom:0;">Switch between dark obsidian and pearl light modes.</p>
             </div>
             <button id="theme-toggle-settings" class="btn-secondary mini theme-toggle-btn">Toggle Theme</button>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-top:1px solid var(--border); padding-top:16px; flex-wrap:wrap; gap:12px;">
+            <div>
+              <strong>Offline JSON Backup</strong>
+              <p class="card-desc" style="margin-bottom:0;">Save an unencrypted JSON file of your ledger to your device or restore one.</p>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-secondary mini" onclick="exportLocalBackup()">Export JSON</button>
+              <button class="btn-secondary mini" onclick="document.getElementById('import-json-input').click()">Import JSON</button>
+              <input type="file" id="import-json-input" accept=".json" style="display:none" onchange="importLocalBackup(this.files[0])">
+            </div>
           </div>
           
           <div class="settings-row danger-zone" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px; display:flex; justify-content:space-between; align-items:center;">

@@ -98,24 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   initInteractionPolish();
 
-  // Try to restore/sync Drive backup if already connected
+  // Restore active user session on startup without triggering popup blocker
   if (isConnected) {
-    console.info('[Spendly:Auth] Existing Drive connection detected. Polling for Google Identity Services...');
-    let retries = 0;
-    const checkGsi = setInterval(() => {
-      if (window.google?.accounts?.oauth2) {
-        clearInterval(checkGsi);
-        console.info('[Spendly:Auth] Google Identity Services loaded. Initiating automatic sign-in check.');
-        signInWithGoogle();
-      } else {
-        retries++;
-        if (retries >= 30) {
-          clearInterval(checkGsi);
-          console.warn('[Spendly:Auth] Google Identity Services script failed to load after 15 seconds.');
-          setDriveStatus('Connection timed out (verify network)', false);
-        }
-      }
-    }, 500);
+    console.info('[Spendly:Auth] Active user session verified:', S.userProfile?.email || 'Local User');
+    setDriveStatus('Google Drive connected', true);
   }
 });
 
@@ -175,7 +161,7 @@ function setDriveStatus(message, connected = false) {
 
   if (connected) {
     if (cardSync) cardSync.style.display = 'block';
-    if (btnToggle) btnToggle.textContent = 'Disconnect Google Account';
+    if (btnToggle) btnToggle.textContent = 'Sync / Reconnect Drive';
     
     if (profileCard && S.userProfile) {
       const avatar = document.getElementById('gdrive-avatar');
@@ -212,8 +198,8 @@ function updateStatusChip(state, text) {
   console.debug(`[Spendly:UI] Status chip updated -> state: "${state}", label: "${text}"`);
 }
 
-function signInWithGoogle() {
-  console.info('[Spendly:Auth] signInWithGoogle() called.');
+function signInWithGoogle(actionAfterAuth = null) {
+  console.info('[Spendly:Auth] signInWithGoogle() called on user gesture.');
   const clientId = getGoogleClientId();
   if (!clientId) {
     console.error('[Spendly:Auth] Sign-in aborted: Google Client ID is not configured.');
@@ -262,12 +248,16 @@ function signInWithGoogle() {
 
         setDriveStatus('Google Drive connected', true);
         enterWorkspace();
-        checkAndRestoreDriveBackup();
+        if (typeof actionAfterAuth === 'function') {
+          actionAfterAuth();
+        } else {
+          checkAndRestoreDriveBackup();
+        }
       }
     });
 
     const isConnected = localStorage.getItem('spendly_drive_connected') === 'true';
-    console.debug(`[Spendly:Auth] Requesting access token (prompt: "${isConnected ? 'silent' : 'select_account'}")...`);
+    console.debug(`[Spendly:Auth] Requesting access token (prompt: "${isConnected ? '' : 'select_account'}")...`);
     driveTokenClient.requestAccessToken({
       prompt: isConnected ? '' : 'select_account'
     });
@@ -278,19 +268,81 @@ function signInWithGoogle() {
 
 function handleGoogleSignIn() {
   if (localStorage.getItem('spendly_drive_connected') === 'true') {
-    if (confirm('Disconnect Google Drive? Local data remains, but background backups will pause.')) {
-      console.info('[Spendly:Auth] User disconnected Google Drive.');
-      driveAccessToken = '';
-      localStorage.removeItem('spendly_drive_connected');
-      localStorage.removeItem('spendly_user_profile');
-      S.userProfile = null;
-      setDriveStatus('Not connected', false);
-      updateStatusChip('offline', 'Local-first');
-      window.location.href = 'login.html';
-    }
+    signInWithGoogle(() => {
+      showToast('Drive connection refreshed', 'ok');
+      syncDriveBackup(false);
+    });
   } else {
     signInWithGoogle();
   }
+}
+
+function logoutUser() {
+  if (!confirm('Sign out of your Spendly session? Your local financial records will remain safe on this device.')) return;
+  console.info('[Spendly:Auth] User signed out.');
+  driveAccessToken = '';
+  localStorage.removeItem('spendly_drive_connected');
+  localStorage.removeItem('spendly_user_profile');
+  localStorage.removeItem('spendly_workspace_entered');
+  S.userProfile = null;
+  setDriveStatus('Not connected', false);
+  updateStatusChip('offline', 'Local-first');
+  showToast('Signed out successfully', 'info');
+  setTimeout(() => {
+    window.location.href = 'login.html';
+  }, 250);
+}
+
+function exportLocalBackup() {
+  console.info('[Spendly:Backup] Exporting local JSON backup file...');
+  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({
+    version: APP_VERSION,
+    exportedAt: new Date().toISOString(),
+    transactions: S.transactions,
+    accounts: S.accounts,
+    budgets: S.budgets,
+    loans: S.loans
+  }, null, 2));
+  const dlAnchor = document.createElement('a');
+  dlAnchor.setAttribute('href', dataStr);
+  const dateTag = new Date().toISOString().split('T')[0];
+  dlAnchor.setAttribute('download', `spendly_backup_${dateTag}.json`);
+  document.body.appendChild(dlAnchor);
+  dlAnchor.click();
+  dlAnchor.remove();
+  showToast('Backup JSON exported', 'ok');
+}
+
+function importLocalBackup(file) {
+  if (!file) return;
+  console.info('[Spendly:Backup] Reading local JSON backup file:', file.name);
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data || !Array.isArray(data.transactions)) {
+        console.error('[Spendly:Backup] Invalid JSON backup structure.');
+        showToast('Invalid backup JSON file', 'err');
+        return;
+      }
+      if (!confirm(`Import backup containing ${data.transactions.length} transactions? This will overwrite your current workspace.`)) {
+        return;
+      }
+      S.transactions = data.transactions || [];
+      S.accounts = data.accounts || ['Savings', 'Credit Card', 'Cash'];
+      S.budgets = data.budgets || {};
+      S.loans = data.loans || [];
+      saveLocalCache();
+      populateDropdowns();
+      renderAccounts();
+      renderDashboard();
+      showToast('Workspace imported successfully', 'ok');
+    } catch (err) {
+      console.error('[Spendly:Backup] Failed to parse JSON backup:', err);
+      showToast('Corrupted JSON file', 'err');
+    }
+  };
+  reader.readAsText(file);
 }
 
 async function syncDriveBackup(isBackground = false) {
@@ -458,16 +510,19 @@ async function checkAndRestoreDriveBackup() {
 
 async function restoreDriveBackup() {
   console.info('[Spendly:Drive] restoreDriveBackup() triggered by user action.');
-  if (!driveAccessToken) {
-    console.warn('[Spendly:Drive] Manual restore aborted: No access token.');
-    setDriveStatus('Connect Google Drive before restoring.');
-    showToast('Connect Google Drive first', 'err');
-    return;
-  }
   if (!confirm('This will replace your local workspace with the backup in Google Drive. Proceed?')) {
     console.debug('[Spendly:Drive] Manual restore cancelled by user prompt.');
     return;
   }
+  if (!driveAccessToken) {
+    console.info('[Spendly:Drive] Access token not present in memory. Re-authorizing before restore...');
+    signInWithGoogle(() => executeDriveRestore());
+    return;
+  }
+  executeDriveRestore();
+}
+
+async function executeDriveRestore() {
   setDriveStatus('Restoring from Google Drive...');
   const headers = { Authorization: `Bearer ${driveAccessToken}` };
   try {
@@ -1408,6 +1463,11 @@ function debouncedDriveSync() {
 }
 
 async function syncWithGoogleDrive(showFeedback = false) {
+  if (!driveAccessToken) {
+    console.info('[Spendly:Drive] Access token not active in memory. Re-authenticating on user gesture before sync...');
+    signInWithGoogle(() => syncDriveBackup(!showFeedback));
+    return;
+  }
   await syncDriveBackup(!showFeedback);
 }
 
