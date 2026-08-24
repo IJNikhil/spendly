@@ -5,17 +5,9 @@
 
 // Global Exception & Unhandled Rejection Listeners
 window.addEventListener('error', (e) => {
-  const msg = e.message || '';
-  if (msg.includes('ResizeObserver') || msg.includes('chrome-extension://') || msg.includes('moz-extension://')) {
-    return; // Ignore benign browser/extension noise
-  }
   console.error('[Spendly:GlobalError] Uncaught window error:', e.message, 'at', `${e.filename}:${e.lineno}:${e.colno}`, e.error);
 });
 window.addEventListener('unhandledrejection', (e) => {
-  const reason = e.reason ? (e.reason.message || String(e.reason)) : '';
-  if (reason.includes('message channel closed') || reason.includes('ResizeObserver') || reason.includes('chrome-extension://')) {
-    return; // Ignore browser extension background messaging disconnects
-  }
   console.error('[Spendly:GlobalError] Unhandled Promise Rejection:', e.reason);
 });
 
@@ -368,12 +360,17 @@ async function syncDriveBackup(isBackground = false) {
     console.debug('[Spendly:Drive] Querying Drive API for existing spendly_db.json in appDataFolder...');
     const search = await fetch('https://www.googleapis.com/drive/v3/files?q=name%3D%27spendly_db.json%27%20and%20%27appDataFolder%27%20in%20parents&spaces=appDataFolder&fields=files(id)', { headers });
     if (!search.ok) {
-      console.error('[Spendly:Drive] Drive file search HTTP error:', search.status, search.statusText);
+      const errBody = await search.text();
+      console.error('[Spendly:Drive] Drive file search HTTP error:', search.status, search.statusText, errBody);
       if (search.status === 401) {
         setDriveStatus('Sync paused (reconnect Drive)', false);
         return;
       }
-      throw new Error(`Drive lookup failed with status ${search.status}`);
+      if (search.status === 403) {
+        setDriveStatus('Drive API disabled or forbidden in Google Cloud', false);
+        throw new Error(`Google Drive API returned 403 (Ensure Google Drive API is ENABLED in Google Cloud Console): ${errBody}`);
+      }
+      throw new Error(`Drive lookup failed with status ${search.status}: ${errBody}`);
     }
     const matches = await search.json();
     const fileId = matches.files?.[0]?.id;
@@ -388,24 +385,26 @@ async function syncDriveBackup(isBackground = false) {
         method: 'POST', headers, body: JSON.stringify({ name: 'spendly_db.json', parents: ['appDataFolder'], mimeType: 'application/json' })
       });
       if (!metadata.ok) {
-        console.error('[Spendly:Drive] Drive file metadata creation HTTP error:', metadata.status, metadata.statusText);
+        const metaErr = await metadata.text();
+        console.error('[Spendly:Drive] Drive file metadata creation HTTP error:', metadata.status, metadata.statusText, metaErr);
         if (metadata.status === 401) {
           setDriveStatus('Sync paused (reconnect Drive)', false);
           return;
         }
-        throw new Error(`Drive file creation failed with status ${metadata.status}`);
+        throw new Error(`Drive file creation failed with status ${metadata.status}: ${metaErr}`);
       }
       const created = await metadata.json();
       console.info(`[Spendly:Drive] Created new backup file ID: "${created.id}". Uploading media payload...`);
       response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${created.id}?uploadType=media`, { method: 'PATCH', headers, body });
     }
     if (!response.ok) {
-      console.error('[Spendly:Drive] Media upload HTTP error:', response.status, response.statusText);
+      const uploadErr = await response.text();
+      console.error('[Spendly:Drive] Media upload HTTP error:', response.status, response.statusText, uploadErr);
       if (response.status === 401) {
         setDriveStatus('Sync paused (reconnect Drive)', false);
         return;
       }
-      throw new Error(`Drive backup upload failed with status ${response.status}`);
+      throw new Error(`Drive backup upload failed with status ${response.status}: ${uploadErr}`);
     }
     console.info('[Spendly:Drive] Cloud backup successfully written to Google Drive.');
     setDriveStatus('Backed up just now', true);
@@ -436,8 +435,11 @@ async function checkAndRestoreDriveBackup() {
   try {
     const search = await fetch('https://www.googleapis.com/drive/v3/files?q=name%3D%27spendly_db.json%27%20and%20%27appDataFolder%27%20in%20parents&spaces=appDataFolder&fields=files(id)', { headers });
     if (!search.ok) {
-      console.error('[Spendly:Drive] Search error during backup check:', search.status);
-      throw new Error('Drive search failed');
+      const errText = await search.text();
+      console.error('[Spendly:Drive] Check backup HTTP error:', search.status, search.statusText, errText);
+      setDriveStatus('Drive backup check failed.', false);
+      updateStatusChip('paused', 'Sync paused');
+      return;
     }
     const matches = await search.json();
     const fileId = matches.files?.[0]?.id;
